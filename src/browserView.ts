@@ -6,7 +6,7 @@ import { openUntitledCodeDocument, resolveWorkspacePath } from "./editorTools";
 import { MarkdownLogger } from "./logging";
 import { isMarkdownLikeFilePath } from "./markdownFiles";
 import { renderMarkdownDocument } from "./previewRenderer";
-import { RenderedMarkdownDocument } from "./types";
+import { FileLocationTarget, RenderedMarkdownDocument } from "./types";
 
 interface WebviewFileSummary {
   relativePath: string;
@@ -182,6 +182,8 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
       path?: string;
       line?: number;
       href?: string;
+      hrefs?: string[];
+      requestId?: string;
       content?: string;
       language?: string;
     };
@@ -214,6 +216,14 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
           await this.openLocalLink(typed.href);
         }
         break;
+      case "openLocalLinkInEditor":
+        if (typed.href) {
+          await this.openLocalLink(typed.href, {
+            preferPreview: false,
+            pinned: true,
+          });
+        }
+        break;
       case "openPreviewCodeBlock":
         if (typed.content) {
           await openUntitledCodeDocument(
@@ -225,12 +235,66 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
           );
         }
         break;
+      case "resolvePreviewLinks":
+        if (typed.requestId && Array.isArray(typed.hrefs)) {
+          await this.resolvePreviewLinks(typed.requestId, typed.hrefs);
+        }
+        break;
       default:
         break;
     }
   }
 
-  private async openLocalLink(href: string): Promise<void> {
+  private async resolvePreviewLinks(
+    requestId: string,
+    hrefs: string[],
+  ): Promise<void> {
+    if (!this.panel) {
+      return;
+    }
+
+    const baseUri = this.selectedPath
+      ? this.discovery.getByRelativePath(this.selectedPath)?.uri
+      : undefined;
+    const uniqueHrefs = [...new Set(hrefs)].filter(
+      (href): href is string =>
+        typeof href === "string" && href.trim().length > 0,
+    );
+    const resolvedResults = await Promise.all(
+      uniqueHrefs.map(async (href) => {
+        const target = await resolveWorkspacePath(href, baseUri);
+        if (!target) {
+          return undefined;
+        }
+
+        const relativePath = await this.discovery.resolveRelativePath(
+          target.uri,
+        );
+        return {
+          href,
+          kind: target.kind,
+          isMarkdown:
+            target.kind === "file" &&
+            isMarkdownLikeFilePath(
+              target.uri.fsPath,
+              this.getMarkdownExtensions(),
+            ),
+          tooltip: formatPreviewLinkTooltip(target, relativePath),
+        };
+      }),
+    );
+
+    await this.panel.webview.postMessage({
+      type: "previewLinksResolved",
+      requestId,
+      results: resolvedResults.filter((result) => result !== undefined),
+    });
+  }
+
+  private async openLocalLink(
+    href: string,
+    options: { preferPreview?: boolean; pinned?: boolean } = {},
+  ): Promise<void> {
     const baseUri = this.selectedPath
       ? this.discovery.getByRelativePath(this.selectedPath)?.uri
       : undefined;
@@ -246,8 +310,9 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
     const isMarkdownTarget =
       target.kind === "file" &&
       isMarkdownLikeFilePath(target.uri.fsPath, this.getMarkdownExtensions());
+    const preferPreview = options.preferPreview ?? true;
 
-    if (isMarkdownTarget && relativePath) {
+    if (preferPreview && isMarkdownTarget && relativePath) {
       await this.revealAndOpenByRelativePath(relativePath);
       if (typeof target.line === "number") {
         await showDocument(
@@ -255,6 +320,7 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
           target.line,
           target.endLine,
           target.column,
+          { pinned: options.pinned },
         );
       }
       return;
@@ -265,7 +331,9 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
       return;
     }
 
-    await showDocument(target.uri, target.line, target.endLine, target.column);
+    await showDocument(target.uri, target.line, target.endLine, target.column, {
+      pinned: options.pinned,
+    });
   }
 
   private renderMarkdown(text: string): RenderedMarkdownDocument {
@@ -311,11 +379,41 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
   }
 }
 
+function formatPreviewLinkTooltip(
+  target: FileLocationTarget,
+  relativePath?: string,
+): string {
+  const displayPath = relativePath ?? target.uri.fsPath;
+
+  if (target.kind === "directory") {
+    return `Reveal ${displayPath} in explorer`;
+  }
+
+  if (
+    typeof target.line === "number" &&
+    typeof target.endLine === "number" &&
+    target.line !== target.endLine
+  ) {
+    return `Open ${displayPath}:${target.line}-${target.endLine}`;
+  }
+
+  if (typeof target.line === "number" && typeof target.column === "number") {
+    return `Open ${displayPath}:${target.line}:${target.column}`;
+  }
+
+  if (typeof target.line === "number") {
+    return `Open ${displayPath}:${target.line}`;
+  }
+
+  return `Open ${displayPath}`;
+}
+
 async function showDocument(
   uri: vscode.Uri,
   line?: number,
   endLine?: number,
   column?: number,
+  options: { pinned?: boolean } = {},
 ): Promise<void> {
   const document = await vscode.workspace.openTextDocument(uri);
   if (
@@ -339,7 +437,7 @@ async function showDocument(
     );
     const range = new vscode.Range(selectionStart, selectionEnd);
     const editor = await vscode.window.showTextDocument(document, {
-      preview: true,
+      preview: !options.pinned,
       selection: range,
     });
     editor.revealRange(
@@ -349,5 +447,7 @@ async function showDocument(
     return;
   }
 
-  await vscode.window.showTextDocument(document, { preview: true });
+  await vscode.window.showTextDocument(document, {
+    preview: !options.pinned,
+  });
 }

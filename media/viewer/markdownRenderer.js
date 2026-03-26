@@ -3,12 +3,90 @@ import mermaid from "mermaid";
 import svgPanZoom from "svg-pan-zoom";
 
 const COLLAPSED_CODE_LINES = 15;
+const TABLE_COLUMN_MAX_WIDTH = 360;
+const TABLE_COLUMN_GROWTH_LIMIT = 720;
+const PATH_TOKEN_RE =
+  /(^|[\s([{"'`])((?:file:\/\/\/|~\/|\.\.\/|\.\/|\/)?[A-Za-z0-9_@.~-]+(?:\/[A-Za-z0-9_@.,+=~-]+)+(?:\/)?(?:(?::\d+(?::\d+)?(?:-\d+)?)|(?:#L\d+(?:C\d+)?(?:-L?\d+)?)|(?:#\S+))?)(?=$|[\s)\]}"'`.,;!?])/gm;
+const SORT_COLLATOR = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
 
 export async function enhancePreview(container, tools) {
   await Promise.all([
+    enhanceLocalLinks(container, tools),
+    enhanceTables(container, tools),
     enhanceCodeBlocks(container, tools),
     enhanceMermaidBlocks(container, tools),
   ]);
+}
+
+async function enhanceLocalLinks(container, tools) {
+  container.querySelectorAll("a[data-local-href]").forEach((anchor) => {
+    activateLocalLink(anchor, tools);
+  });
+
+  const textNodes = collectLinkableTextNodes(container);
+  if (textNodes.length === 0) {
+    return;
+  }
+
+  const hrefs = new Set();
+  for (const node of textNodes) {
+    for (const match of getPathTokenMatches(node.textContent || "")) {
+      hrefs.add(match.rawValue);
+    }
+  }
+
+  if (hrefs.size === 0) {
+    return;
+  }
+
+  const resolutions = await tools.requestResolvedLocalLinks([...hrefs]);
+  const resolvedByHref = new Map(
+    resolutions
+      .filter((entry) => entry && typeof entry.href === "string")
+      .map((entry) => [entry.href, entry]),
+  );
+
+  if (resolvedByHref.size === 0) {
+    return;
+  }
+
+  for (const node of textNodes) {
+    replacePathTokensInTextNode(node, tools, resolvedByHref);
+  }
+}
+
+function collectLinkableTextNodes(container) {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!(node.parentElement instanceof HTMLElement)) {
+        return NodeFilter.FILTER_REJECT;
+      }
+
+      if (
+        node.parentElement.closest(
+          "a, pre, script, style, button, input, textarea",
+        )
+      ) {
+        return NodeFilter.FILTER_REJECT;
+      }
+
+      if (!node.textContent || !containsPathToken(node.textContent)) {
+        return NodeFilter.FILTER_REJECT;
+      }
+
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  const textNodes = [];
+  while (walker.nextNode()) {
+    textNodes.push(walker.currentNode);
+  }
+
+  return textNodes;
 }
 
 async function enhanceCodeBlocks(container, tools) {
@@ -57,18 +135,6 @@ async function enhanceCodeBlocks(container, tools) {
     const actions = document.createElement("div");
     actions.className = "code-block-actions";
 
-    if (lineCount > COLLAPSED_CODE_LINES) {
-      const expandButton = document.createElement("button");
-      expandButton.type = "button";
-      expandButton.className = "code-block-button";
-      expandButton.textContent = "Expand";
-      expandButton.addEventListener("click", () => {
-        const collapsed = wrapper.classList.toggle("is-collapsed");
-        expandButton.textContent = collapsed ? "Expand" : "Collapse";
-      });
-      actions.append(expandButton);
-    }
-
     const copyButton = document.createElement("button");
     copyButton.type = "button";
     copyButton.className = "code-block-button icon-button icon-copy";
@@ -108,6 +174,18 @@ async function enhanceCodeBlocks(container, tools) {
 
     actions.append(copyButton, modalButton, openButton);
 
+    if (lineCount > COLLAPSED_CODE_LINES) {
+      const expandButton = document.createElement("button");
+      expandButton.type = "button";
+      expandButton.className = "code-block-button code-block-expand-button";
+      expandButton.textContent = "Expand";
+      expandButton.addEventListener("click", () => {
+        const collapsed = wrapper.classList.toggle("is-collapsed");
+        expandButton.textContent = collapsed ? "Expand" : "Collapse";
+      });
+      wrapper.append(expandButton);
+    }
+
     const viewport = document.createElement("div");
     viewport.className = "code-block-viewport";
 
@@ -117,6 +195,55 @@ async function enhanceCodeBlocks(container, tools) {
     viewport.append(pre);
     toolbar.append(meta, actions);
     wrapper.append(toolbar, viewport);
+  }
+}
+
+async function enhanceTables(container, tools) {
+  const tables = container.querySelectorAll("table");
+
+  for (const table of tables) {
+    if (
+      table.dataset.enhanced === "true" ||
+      table.closest(".front-matter-card")
+    ) {
+      continue;
+    }
+
+    table.dataset.enhanced = "true";
+    const model = extractTableModel(table);
+    if (!model) {
+      continue;
+    }
+
+    const block = document.createElement("section");
+    block.className = "table-block";
+
+    const actions = document.createElement("div");
+    actions.className = "table-inline-actions";
+
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "table-open-button icon-button icon-table-tools";
+    openButton.title = "Open table tools";
+    openButton.setAttribute("aria-label", "Open table tools");
+    openButton.addEventListener("click", () => {
+      const modalParts = createTableModalContent(model);
+      tools.showModal({
+        title: model.caption || "Table tools",
+        subtitle: `${model.rows.length} ${model.rows.length === 1 ? "row" : "rows"} • ${model.headers.length} ${model.headers.length === 1 ? "column" : "columns"}`,
+        content: modalParts.content,
+        headerContent: modalParts.header,
+        wide: true,
+      });
+    });
+
+    const frame = document.createElement("div");
+    frame.className = "table-scroll-frame";
+
+    table.replaceWith(block);
+    actions.append(openButton);
+    frame.append(table);
+    block.append(actions, frame);
   }
 }
 
@@ -289,6 +416,274 @@ function createCodeModalContent(source, language) {
   return wrapper;
 }
 
+function createTableModalContent(model) {
+  const stage = document.createElement("section");
+  stage.className = "table-modal-stage";
+
+  const header = document.createElement("div");
+  header.className = "table-modal-header";
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "table-modal-toolbar";
+
+  const actions = document.createElement("div");
+  actions.className = "table-modal-actions";
+
+  const filterInput = document.createElement("input");
+  filterInput.type = "search";
+  filterInput.className = "table-filter-input";
+  filterInput.placeholder = "Filter rows";
+  filterInput.autocomplete = "off";
+  filterInput.spellcheck = false;
+
+  const summary = document.createElement("p");
+  summary.className = "table-modal-summary";
+
+  const toggles = document.createElement("div");
+  toggles.className = "table-column-toggles";
+
+  const tableFrame = document.createElement("div");
+  tableFrame.className = "table-modal-frame";
+
+  const state = {
+    query: "",
+    sortColumn: -1,
+    sortDirection: "asc",
+    visibleColumns: new Set(model.headers.map((_, index) => index)),
+    columnFloorWidths: new Map(
+      model.headers.map((header, index) => [
+        index,
+        getColumnFloorWidth(model, index, header),
+      ]),
+    ),
+    columnWidths: new Map(
+      model.headers.map((header, index) => [
+        index,
+        getInitialColumnWidth(model, index, header),
+      ]),
+    ),
+  };
+
+  filterInput.addEventListener("input", () => {
+    state.query = filterInput.value.trim().toLowerCase();
+    render();
+  });
+
+  const showAllButton = createTableActionButton("Show all", () => {
+    state.visibleColumns = new Set(model.headers.map((_, index) => index));
+    render();
+  });
+
+  const hideAllButton = createTableActionButton("Hide all", () => {
+    state.visibleColumns = new Set();
+    state.sortColumn = -1;
+    render();
+  });
+
+  const fitColumnsButton = createTableActionButton("Fit columns", () => {
+    fitColumnsToFrame(model, state, tableFrame);
+    render();
+  });
+
+  model.headers.forEach((header, index) => {
+    const label = document.createElement("label");
+    label.className = "table-column-toggle";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = true;
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        state.visibleColumns.add(index);
+      } else {
+        state.visibleColumns.delete(index);
+      }
+
+      if (!state.visibleColumns.has(state.sortColumn)) {
+        state.sortColumn = -1;
+      }
+      render();
+    });
+
+    const text = document.createElement("span");
+    text.textContent = header;
+    label.append(checkbox, text);
+    toggles.append(label);
+  });
+
+  actions.append(showAllButton, hideAllButton, fitColumnsButton);
+  toolbar.append(filterInput, summary, actions);
+  header.append(toolbar, toggles);
+  stage.append(tableFrame);
+
+  render();
+  return {
+    content: stage,
+    header,
+  };
+
+  function render() {
+    const visibleColumns = model.headers
+      .map((header, index) => ({ header, index }))
+      .filter(({ index }) => state.visibleColumns.has(index));
+
+    let rows = model.rows.filter((row) => {
+      if (!state.query) {
+        return true;
+      }
+      return row.some((value) => value.toLowerCase().includes(state.query));
+    });
+
+    if (state.sortColumn >= 0) {
+      rows = [...rows].sort((left, right) => {
+        const comparison = SORT_COLLATOR.compare(
+          left[state.sortColumn] ?? "",
+          right[state.sortColumn] ?? "",
+        );
+        return state.sortDirection === "asc" ? comparison : -comparison;
+      });
+    }
+
+    summary.textContent = `${rows.length} of ${model.rows.length} rows visible`;
+
+    toggles
+      .querySelectorAll("input[type='checkbox']")
+      .forEach((input, index) => {
+        if (input instanceof HTMLInputElement) {
+          input.checked = state.visibleColumns.has(index);
+        }
+      });
+
+    if (state.visibleColumns.size === 0) {
+      const empty = document.createElement("div");
+      empty.className = "table-empty-state";
+      empty.textContent =
+        "All columns are hidden. Use Show all or enable columns above.";
+      tableFrame.replaceChildren(empty);
+      return;
+    }
+
+    if (rows.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "table-empty-state";
+      empty.textContent = "No rows match the current filter.";
+      tableFrame.replaceChildren(empty);
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.className = "table-modal-table";
+
+    const colgroup = document.createElement("colgroup");
+    for (const column of visibleColumns) {
+      const col = document.createElement("col");
+      const width =
+        state.columnWidths.get(column.index) ?? TABLE_COLUMN_MAX_WIDTH;
+      col.style.width = `${width}px`;
+      col.style.minWidth = `${state.columnFloorWidths.get(column.index) ?? 140}px`;
+      colgroup.append(col);
+    }
+
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+
+    for (const column of visibleColumns) {
+      const th = document.createElement("th");
+      const headInner = document.createElement("div");
+      headInner.className = "table-th-inner";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "table-sort-button";
+      button.textContent = column.header;
+      if (state.sortColumn === column.index) {
+        button.dataset.direction = state.sortDirection;
+      }
+      button.addEventListener("click", () => {
+        if (state.sortColumn !== column.index) {
+          state.sortColumn = column.index;
+          state.sortDirection = "asc";
+        } else if (state.sortDirection === "asc") {
+          state.sortDirection = "desc";
+        } else {
+          state.sortColumn = -1;
+          state.sortDirection = "asc";
+        }
+        render();
+      });
+
+      const resizeHandle = document.createElement("button");
+      resizeHandle.type = "button";
+      resizeHandle.className = "table-resize-handle";
+      resizeHandle.title = `Resize ${column.header} column`;
+      resizeHandle.setAttribute("aria-label", `Resize ${column.header} column`);
+      resizeHandle.addEventListener("pointerdown", (event) => {
+        beginColumnResize(event, column.index, state, render);
+      });
+
+      headInner.append(button, resizeHandle);
+      th.append(headInner);
+      headRow.append(th);
+    }
+
+    thead.append(headRow);
+
+    const tbody = document.createElement("tbody");
+    for (const row of rows) {
+      const tr = document.createElement("tr");
+      for (const column of visibleColumns) {
+        const td = document.createElement("td");
+        td.textContent = row[column.index] ?? "";
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+
+    table.append(colgroup, thead, tbody);
+    tableFrame.replaceChildren(table);
+  }
+}
+
+function beginColumnResize(event, columnIndex, state, rerender) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  const pointerId = event.pointerId;
+  const startX = event.clientX;
+  const startWidth =
+    state.columnWidths.get(columnIndex) ?? TABLE_COLUMN_MAX_WIDTH;
+  const minWidth = state.columnFloorWidths.get(columnIndex) ?? 140;
+  const handle = event.currentTarget;
+  if (handle instanceof HTMLElement) {
+    handle.setPointerCapture?.(pointerId);
+    handle.classList.add("is-active");
+  }
+
+  const onPointerMove = (moveEvent) => {
+    const nextWidth = clamp(
+      startWidth + moveEvent.clientX - startX,
+      minWidth,
+      TABLE_COLUMN_GROWTH_LIMIT,
+    );
+    state.columnWidths.set(columnIndex, nextWidth);
+    rerender();
+  };
+
+  const finishResize = () => {
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", finishResize);
+    window.removeEventListener("pointercancel", finishResize);
+    if (handle instanceof HTMLElement) {
+      handle.classList.remove("is-active");
+      handle.releasePointerCapture?.(pointerId);
+    }
+  };
+
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", finishResize, { once: true });
+  window.addEventListener("pointercancel", finishResize, { once: true });
+}
+
 async function renderMermaidDiagram(container, source, panZoomOptions) {
   const { svg } = await mermaid.render(uid("mermaid"), source);
   container.innerHTML = svg;
@@ -337,6 +732,308 @@ function countLines(source) {
   }
 
   return source.replace(/\n$/, "").split("\n").length;
+}
+
+function containsPathToken(text) {
+  return new RegExp(PATH_TOKEN_RE).test(text);
+}
+
+function getPathTokenMatches(text) {
+  const matches = [];
+
+  for (const match of text.matchAll(PATH_TOKEN_RE)) {
+    const rawValue = match[2];
+    if (!rawValue) {
+      continue;
+    }
+
+    matches.push({
+      prefix: match[1] || "",
+      rawValue,
+      index: match.index ?? 0,
+    });
+  }
+
+  return matches;
+}
+
+function replacePathTokensInTextNode(node, tools, resolvedByHref) {
+  if (!node.parentNode) {
+    return;
+  }
+
+  const text = node.textContent || "";
+  const fragment = document.createDocumentFragment();
+  const anchors = [];
+  let cursor = 0;
+
+  for (const match of getPathTokenMatches(text)) {
+    const resolution = resolvedByHref.get(match.rawValue);
+    if (!resolution) {
+      continue;
+    }
+
+    const startOffset = match.index + match.prefix.length;
+    const endOffset = startOffset + match.rawValue.length;
+    fragment.append(text.slice(cursor, startOffset));
+    const anchor = createLocalLinkAnchor(match.rawValue, resolution);
+    fragment.append(anchor);
+    anchors.push(anchor);
+    cursor = endOffset;
+  }
+
+  if (anchors.length === 0) {
+    return;
+  }
+
+  fragment.append(text.slice(cursor));
+  node.replaceWith(fragment);
+  for (const anchor of anchors) {
+    activateLocalLink(anchor, tools);
+  }
+}
+
+function createLocalLinkAnchor(rawValue, resolution) {
+  const anchor = document.createElement("a");
+  const kind = resolution.isMarkdown ? "markdown" : "file";
+  anchor.href = "#";
+  anchor.className = `preview-link preview-detected-link ${kind === "markdown" ? "is-markdown-link" : "is-file-link"}`;
+  anchor.dataset.localHref = rawValue;
+  anchor.dataset.linkKind = kind;
+  if (typeof resolution.tooltip === "string" && resolution.tooltip.length > 0) {
+    anchor.title = resolution.tooltip;
+  }
+  anchor.textContent = rawValue;
+  return anchor;
+}
+
+function activateLocalLink(anchor, tools) {
+  if (
+    !(anchor instanceof HTMLAnchorElement) ||
+    anchor.dataset.linkEnhanced === "true"
+  ) {
+    return;
+  }
+
+  const href = anchor.getAttribute("data-local-href");
+  if (!href) {
+    return;
+  }
+
+  anchor.dataset.linkEnhanced = "true";
+  anchor.addEventListener("click", (event) => {
+    event.preventDefault();
+    tools.vscode.postMessage({ type: "openLocalLink", href });
+  });
+
+  if (anchor.querySelector("img, svg, table, pre, code, div")) {
+    return;
+  }
+
+  let group = anchor.parentElement;
+  if (
+    !(group instanceof HTMLElement) ||
+    !group.classList.contains("preview-link-group")
+  ) {
+    group = document.createElement("span");
+    group.className = "preview-link-group";
+    anchor.replaceWith(group);
+    group.append(anchor);
+  }
+
+  group.classList.add("is-local-link");
+  group.classList.toggle(
+    "is-markdown-link",
+    anchor.dataset.linkKind === "markdown",
+  );
+  group.classList.toggle(
+    "is-file-link",
+    anchor.dataset.linkKind !== "markdown",
+  );
+
+  if (group.querySelector(".preview-link-action")) {
+    return;
+  }
+
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "preview-link-action icon-button icon-open-link";
+  action.title = "Open link in editor";
+  action.setAttribute("aria-label", "Open link in editor");
+  action.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    tools.vscode.postMessage({ type: "openLocalLinkInEditor", href });
+  });
+  group.append(action);
+}
+
+function extractTableModel(table) {
+  const allRows = Array.from(table.querySelectorAll("tr"));
+  if (allRows.length === 0) {
+    return undefined;
+  }
+
+  const headerRow = table.tHead?.rows[0] ?? allRows[0];
+  const headers = Array.from(headerRow.cells).map((cell, index) => {
+    const text = normalizeTableCellText(cell.textContent);
+    return text || `Column ${index + 1}`;
+  });
+
+  const bodyRows = Array.from(table.tBodies).flatMap((section) =>
+    Array.from(section.rows),
+  );
+  const sourceRows = bodyRows.length > 0 ? bodyRows : allRows.slice(1);
+  const rows = sourceRows.map((row) =>
+    Array.from(row.cells).map((cell) =>
+      normalizeTableCellText(cell.textContent),
+    ),
+  );
+  const columnCount = Math.max(
+    headers.length,
+    ...rows.map((row) => row.length),
+  );
+
+  while (headers.length < columnCount) {
+    headers.push(`Column ${headers.length + 1}`);
+  }
+
+  rows.forEach((row) => {
+    while (row.length < columnCount) {
+      row.push("");
+    }
+  });
+
+  return {
+    caption:
+      normalizeTableCellText(table.querySelector("caption")?.textContent) ||
+      "Table tools",
+    headers,
+    rows,
+  };
+}
+
+function normalizeTableCellText(value) {
+  return (value || "").replace(/\s+/g, " ").trim();
+}
+
+function createTableActionButton(label, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "table-action-button";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function fitColumnsToFrame(model, state, tableFrame) {
+  const visibleColumns = model.headers
+    .map((header, index) => ({ header, index }))
+    .filter(({ index }) => state.visibleColumns.has(index));
+
+  if (visibleColumns.length === 0) {
+    return;
+  }
+
+  const availableWidth = Math.max(tableFrame.clientWidth - 24, 0);
+  const currentWidths = visibleColumns.map(
+    ({ index }) => state.columnWidths.get(index) ?? TABLE_COLUMN_MAX_WIDTH,
+  );
+  const floorWidths = visibleColumns.map(
+    ({ index, header }) =>
+      state.columnFloorWidths.get(index) ??
+      getColumnFloorWidth(model, index, header),
+  );
+  const totalWidth = currentWidths.reduce((sum, width) => sum + width, 0);
+
+  if (availableWidth <= 0 || totalWidth <= availableWidth) {
+    return;
+  }
+
+  let overflow = totalWidth - availableWidth;
+  const nextWidths = [...currentWidths];
+
+  while (overflow > 1) {
+    const shrinkable = nextWidths
+      .map((width, index) => ({
+        index,
+        room: width - floorWidths[index],
+      }))
+      .filter((item) => item.room > 0.5);
+
+    if (shrinkable.length === 0) {
+      break;
+    }
+
+    const totalRoom = shrinkable.reduce((sum, item) => sum + item.room, 0);
+    for (const item of shrinkable) {
+      const share = Math.min(item.room, (overflow * item.room) / totalRoom);
+      nextWidths[item.index] -= share;
+      overflow -= share;
+    }
+  }
+
+  visibleColumns.forEach(({ index }, visibleIndex) => {
+    state.columnWidths.set(
+      index,
+      Math.round(
+        clamp(
+          nextWidths[visibleIndex],
+          floorWidths[visibleIndex],
+          TABLE_COLUMN_GROWTH_LIMIT,
+        ),
+      ),
+    );
+  });
+}
+
+function getColumnFloorWidth(model, columnIndex, header) {
+  const samples = [header, ...model.rows.map((row) => row[columnIndex] ?? "")]
+    .map((value) => normalizeTableCellText(value))
+    .filter(Boolean)
+    .slice(0, 8);
+  const longestWord = samples.reduce((current, value) => {
+    const maxWord = value
+      .split(/\s+/)
+      .reduce((len, word) => Math.max(len, word.length), 0);
+    return Math.max(current, maxWord);
+  }, 0);
+  return clamp(longestWord * 8 + 48, 136, 220);
+}
+
+function getInitialColumnWidth(model, columnIndex, header) {
+  const samples = [header, ...model.rows.map((row) => row[columnIndex] ?? "")]
+    .map((value) => normalizeTableCellText(value))
+    .filter(Boolean)
+    .slice(0, 10);
+
+  const longest = samples.reduce(
+    (current, value) => Math.max(current, value.length),
+    0,
+  );
+
+  return clamp(
+    longest * 7.4 + 44,
+    getColumnFloorWidth(model, columnIndex, header),
+    TABLE_COLUMN_MAX_WIDTH,
+  );
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function isLikelyMarkdownHref(href) {
+  const normalized = href.split(/[?#]/, 1)[0].toLowerCase();
+  return (
+    !normalized ||
+    normalized.endsWith(".md") ||
+    normalized.endsWith(".markdown") ||
+    normalized.endsWith(".mdx") ||
+    normalized.endsWith(".qmd") ||
+    normalized.endsWith(".prompt.md") ||
+    normalized.endsWith(".instructions.md")
+  );
 }
 
 function flashButton(button, label) {

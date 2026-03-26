@@ -8,8 +8,9 @@
 
 ## Improve markdown preview
 
-- Code block expand button needs to appear at the bottom of the code block, not the top header, have it slightly overlap the bottom fo the code block (half on half off)
-- Add the same link detection + "hover overlay" in the rendered markdown so it's consistent with the editor. This would allow users to click links in the preview, and also show the "open in new tab" icon on hover (or onclick)
-- Allow wide tables to bleed out of the container so they have the best chance possible of rendering
-- Add a button on tables that apepars on over to open them in a modal. That modal shoudl offer advanced features like show/hide columns, filtering, ordering, etc.
-- Allow the TOC to get a little wider if hte markdown viewer does not need hte extra width. Also make the whole outer card match the size ofo the makrdown contnet. I don't want a giant card around the content (still allow the table to bleed outside of this container though)
+- [x] Code block expand button appears at the bottom of the code block and overlaps the lower edge.
+- [x] Rendered markdown now detects local path-like links, supports clicks in preview, and shows a hover action to open the target in the editor.
+- [x] Wide tables can bleed outside the reading column while staying horizontally scrollable.
+- [x] Tables expose a hover action that opens a modal with column toggles, filtering, and sorting.
+- [x] The outline can grow wider when the content width allows it, and the preview card now fits the markdown instead of spanning a giant container.
+- [x] Code block styling has been simplified to a cleaner single-surface presentation.

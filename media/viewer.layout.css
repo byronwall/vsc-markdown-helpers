@@ -67,7 +67,9 @@ body.has-modal {
   position: relative;
   display: block;
   min-height: calc(100vh - 2.5rem);
-  padding: 1.25rem calc(var(--outline-width) + 2.5rem) 1.25rem 1.25rem;
+  padding: 1.25rem
+    calc(var(--outline-panel-width, var(--outline-width)) + 2.5rem) 1.25rem
+    1.25rem;
   box-sizing: border-box;
 }
 
@@ -118,7 +120,7 @@ body.has-modal {
   position: fixed;
   top: 1.25rem;
   right: 1.25rem;
-  width: var(--outline-width);
+  width: var(--outline-panel-width, var(--outline-width));
   height: auto;
   max-height: calc(100vh - 2.5rem);
   background: color-mix(in srgb, var(--surface-elevated) 84%, transparent);
@@ -130,11 +132,17 @@ body.has-modal {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  width: min(
+    100%,
+    var(--preview-shell-width, calc(var(--content-width) + 20ch))
+  );
+  margin: 0 auto;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--surface-elevated) 92%, white),
     color-mix(in srgb, var(--surface) 96%, transparent)
   );
+  overflow: visible;
 }
 
 .panel-header,
@@ -174,7 +182,7 @@ body.has-modal {
 .preview-content {
   min-width: 0;
   overflow: visible;
-  padding: 2rem 1.4rem 3.6rem;
+  padding: 1.7rem var(--document-padding) 3.6rem;
   scroll-padding-top: 2rem;
 }
 

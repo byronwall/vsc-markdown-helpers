@@ -20,10 +20,14 @@ const state = {
   modalFocusReturnTarget: undefined,
   modalToken: 0,
   modalImmersive: false,
+  modalScrollTop: 0,
+  previewRenderToken: 0,
 };
 
 let elements;
 let isInitialized = false;
+const pendingPreviewLinkResolutions = new Map();
+let nextPreviewLinkResolutionRequestId = 1;
 
 initialize();
 
@@ -43,6 +47,7 @@ function initialize() {
   }
 
   isInitialized = true;
+  applyWidthVariables(96);
 
   elements.refreshButton.addEventListener("click", () => {
     vscode.postMessage({ type: "refresh" });
@@ -127,10 +132,7 @@ function initialize() {
       case "fileContent":
         state.selectedPath = message.path;
         state.toc = Array.isArray(message.toc) ? message.toc : [];
-        document.documentElement.style.setProperty(
-          "--content-width",
-          `${message.maxWidthCh || 96}ch`,
-        );
+        applyWidthVariables(message.maxWidthCh);
         renderPreview(message.path, message.html);
         renderToc();
         renderFiles();
@@ -139,6 +141,15 @@ function initialize() {
       case "fileError":
         showError(message.message || "Unable to load markdown file.");
         break;
+      case "previewLinksResolved": {
+        const resolve = pendingPreviewLinkResolutions.get(message.requestId);
+        if (!resolve) {
+          break;
+        }
+        pendingPreviewLinkResolutions.delete(message.requestId);
+        resolve(Array.isArray(message.results) ? message.results : []);
+        break;
+      }
       default:
         break;
     }
@@ -157,6 +168,7 @@ function getRequiredElements() {
     filesPanel: document.getElementById("filesPanel"),
     modalCloseButton: document.getElementById("modalCloseButton"),
     modalContent: document.getElementById("modalContent"),
+    modalHeaderExtras: document.getElementById("modalHeaderExtras"),
     modalShell: document.getElementById("modalShell"),
     modalSubtitle: document.getElementById("modalSubtitle"),
     modalTitle: document.getElementById("modalTitle"),
@@ -225,6 +237,7 @@ function renderFiles() {
 }
 
 function renderPreview(path, html) {
+  const renderToken = ++state.previewRenderToken;
   elements.previewTitle.textContent = basename(path);
   elements.previewPath.textContent = path;
   document.title = `${basename(path)} • Markdown Helpers`;
@@ -242,25 +255,42 @@ function renderPreview(path, html) {
     headingCount: state.headings.length,
   });
 
-  elements.previewContent
-    .querySelectorAll("a[data-local-href]")
-    .forEach((anchor) => {
-      anchor.addEventListener("click", (event) => {
-        event.preventDefault();
-        const href = anchor.getAttribute("data-local-href");
-        if (!href) {
-          return;
-        }
-        vscode.postMessage({ type: "openLocalLink", href });
-      });
-    });
-
   void enhancePreview(elements.previewContent, {
     vscode,
     copyText,
     showModal,
+    requestResolvedLocalLinks: (hrefs) =>
+      requestResolvedLocalLinks(hrefs, renderToken),
   }).then(() => {
-    syncActiveHeading();
+    if (renderToken === state.previewRenderToken) {
+      syncActiveHeading();
+    }
+  });
+}
+
+function requestResolvedLocalLinks(hrefs, renderToken) {
+  if (!Array.isArray(hrefs) || hrefs.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  if (renderToken !== state.previewRenderToken) {
+    return Promise.resolve([]);
+  }
+
+  return new Promise((resolve) => {
+    const requestId = String(nextPreviewLinkResolutionRequestId++);
+    pendingPreviewLinkResolutions.set(requestId, (results) => {
+      if (renderToken !== state.previewRenderToken) {
+        resolve([]);
+        return;
+      }
+      resolve(results);
+    });
+    vscode.postMessage({
+      type: "resolvePreviewLinks",
+      requestId,
+      hrefs,
+    });
   });
 }
 
@@ -402,6 +432,7 @@ async function copyText(text) {
 function showModal(options) {
   const {
     content,
+    headerContent,
     immersive = false,
     onClose,
     subtitle,
@@ -414,16 +445,27 @@ function showModal(options) {
   state.modalCleanup = typeof onClose === "function" ? onClose : undefined;
   state.modalFocusReturnTarget = document.activeElement;
   state.modalImmersive = Boolean(immersive);
+  state.modalScrollTop = getCurrentScrollTop();
 
   elements.modalTitle.textContent = title || "Preview";
   elements.modalSubtitle.textContent = subtitle || "";
   elements.modalSubtitle.classList.toggle("hidden", !subtitle);
+  elements.modalHeaderExtras.replaceChildren();
+  if (headerContent instanceof Node) {
+    elements.modalHeaderExtras.append(headerContent);
+    elements.modalHeaderExtras.classList.remove("hidden");
+  } else {
+    elements.modalHeaderExtras.classList.add("hidden");
+  }
   elements.modalContent.replaceChildren(content);
   elements.modalShell.classList.remove("hidden");
   elements.modalShell.setAttribute("aria-hidden", "false");
   elements.modalShell.classList.toggle("is-wide", Boolean(wide));
   elements.modalShell.classList.toggle("is-immersive", state.modalImmersive);
+  document.documentElement.classList.add("has-modal");
   document.body.classList.add("has-modal");
+  document.body.style.top = `-${state.modalScrollTop}px`;
+  document.body.style.width = "100%";
   window.requestAnimationFrame(() => {
     elements.modalCloseButton.focus();
   });
@@ -461,8 +503,15 @@ function hideModal(options = {}) {
   elements.modalTitle.textContent = "Preview";
   elements.modalSubtitle.textContent = "";
   elements.modalSubtitle.classList.add("hidden");
+  elements.modalHeaderExtras.replaceChildren();
+  elements.modalHeaderExtras.classList.add("hidden");
+  document.documentElement.classList.remove("has-modal");
   document.body.classList.remove("has-modal");
+  document.body.style.top = "";
+  document.body.style.width = "";
+  window.scrollTo({ top: state.modalScrollTop, behavior: "instant" });
   state.modalImmersive = false;
+  state.modalScrollTop = 0;
 
   if (options.restoreFocus === false) {
     state.modalFocusReturnTarget = undefined;
@@ -537,4 +586,27 @@ function getCurrentScrollTop() {
 
 function debugToc(event, details) {
   console.debug("[Markdown Helpers][TOC]", event, details);
+}
+
+function applyWidthVariables(maxWidthCh) {
+  const width = Number.isFinite(Number(maxWidthCh))
+    ? Math.max(48, Number(maxWidthCh))
+    : 96;
+  const previewShellWidth = Math.min(width + 22, 136);
+  const outlineWidth = Math.max(22, Math.min(Math.round(width * 0.42), 34));
+  const tableBleed = Math.max(4, Math.min(width * 0.24, 16));
+
+  document.documentElement.style.setProperty("--content-width", `${width}ch`);
+  document.documentElement.style.setProperty(
+    "--preview-shell-width",
+    `${previewShellWidth}ch`,
+  );
+  document.documentElement.style.setProperty(
+    "--outline-panel-width",
+    `clamp(16rem, ${outlineWidth}ch, 22rem)`,
+  );
+  document.documentElement.style.setProperty(
+    "--table-bleed",
+    `${tableBleed}rem`,
+  );
 }
