@@ -9,12 +9,26 @@ import {
   resolveWorkspacePath,
 } from "./editorTools";
 import { MarkdownLogger } from "./logging";
-import { RecentMarkdownItem, RecentMarkdownTreeProvider } from "./tree";
+import {
+  buildMarkdownDocumentSelector,
+  getDefaultMarkdownExtensions,
+  isMarkdownLikeDocument,
+} from "./markdownFiles";
+import {
+  RecentMarkdownFilterMode,
+  RecentMarkdownItem,
+  RecentMarkdownTreeProvider,
+  RecentMarkdownViewState,
+} from "./tree";
 
-const MARKDOWN_SELECTOR: vscode.DocumentSelector = [
-  { language: "markdown", scheme: "file" },
-  { language: "markdown", scheme: "untitled" },
-];
+function getConfiguredExtensions(): string[] {
+  const configured = vscode.workspace
+    .getConfiguration("markdownHelpers")
+    .get<string[]>("extensions", getDefaultMarkdownExtensions());
+  return Array.isArray(configured)
+    ? configured
+    : getDefaultMarkdownExtensions();
+}
 
 export async function activate(
   context: vscode.ExtensionContext,
@@ -26,21 +40,13 @@ export async function activate(
   let recentMarkdownProvider: vscode.TreeDataProvider<vscode.TreeItem> =
     new PlaceholderRecentMarkdownTreeProvider();
   let treeProvider: RecentMarkdownTreeProvider | undefined;
+  let recentMarkdownTreeView: vscode.TreeView<vscode.TreeItem> | undefined;
   let browserProvider: MarkdownBrowserViewProvider | undefined;
 
   const codeLensProvider = new MarkdownCodeBlockCodeLensProvider();
   context.subscriptions.push(codeLensProvider);
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-
-  const getConfiguredExtensions = (): string[] => {
-    const configured = vscode.workspace
-      .getConfiguration("markdownHelpers")
-      .get<string[]>("extensions", [".md", ".markdown", ".mdx"]);
-    return Array.isArray(configured)
-      ? configured
-      : [".md", ".markdown", ".mdx"];
-  };
 
   const getMaxRecent = (): number => {
     const value = vscode.workspace
@@ -56,6 +62,73 @@ export async function activate(
     return Number.isFinite(value) ? Math.max(48, value) : 96;
   };
 
+  const getRecentFilesFilter = (): RecentMarkdownFilterMode => {
+    const value = vscode.workspace
+      .getConfiguration("markdownHelpers")
+      .get<string>("recentFilesFilter", "all");
+    return value === "changedSinceBase" ? value : "all";
+  };
+
+  const getRecentFilesBaseRef = (): string => {
+    const value = vscode.workspace
+      .getConfiguration("markdownHelpers")
+      .get<string>("recentFilesBaseRef", "main");
+    return value?.trim() ? value.trim() : "main";
+  };
+
+  const linkProvider = new MarkdownPathLinkProvider();
+  const hoverProvider = new MarkdownPathHoverProvider();
+  let editorFeatureRegistrations: vscode.Disposable | undefined;
+
+  const registerEditorFeatures = (): void => {
+    editorFeatureRegistrations?.dispose();
+    const selector = buildMarkdownDocumentSelector(getConfiguredExtensions());
+    editorFeatureRegistrations = vscode.Disposable.from(
+      vscode.languages.registerDocumentLinkProvider(selector, linkProvider),
+      vscode.languages.registerHoverProvider(selector, hoverProvider),
+      vscode.languages.registerCodeLensProvider(selector, codeLensProvider),
+    );
+  };
+
+  registerEditorFeatures();
+  context.subscriptions.push({
+    dispose: () => editorFeatureRegistrations?.dispose(),
+  });
+
+  const applyRecentMarkdownViewState = (
+    state: RecentMarkdownViewState,
+  ): void => {
+    if (!recentMarkdownTreeView) {
+      return;
+    }
+    recentMarkdownTreeView.description = state.description;
+    recentMarkdownTreeView.message = state.message;
+    recentMarkdownTreeView.badge = state.badgeValue
+      ? {
+          value: state.badgeValue,
+          tooltip: state.badgeTooltip ?? "Filtered markdown files",
+        }
+      : undefined;
+  };
+
+  const updateRecentMarkdownFilterContext = async (): Promise<void> => {
+    await vscode.commands.executeCommand(
+      "setContext",
+      "markdownHelpers.recentMarkdownPrFilterEnabled",
+      getRecentFilesFilter() === "changedSinceBase",
+    );
+  };
+
+  const refreshRecentMarkdownViewState = async (): Promise<void> => {
+    if (!treeProvider) {
+      applyRecentMarkdownViewState({});
+      return;
+    }
+    applyRecentMarkdownViewState(await treeProvider.getViewState());
+  };
+
+  await updateRecentMarkdownFilterContext();
+
   if (workspaceFolder) {
     try {
       discovery = new MarkdownDiscoveryService(
@@ -66,8 +139,11 @@ export async function activate(
       await discovery.start();
 
       treeProvider = new RecentMarkdownTreeProvider(
+        workspaceFolder.uri,
         discovery,
         getMaxRecent,
+        getRecentFilesFilter,
+        getRecentFilesBaseRef,
         logger,
       );
       browserProvider = new MarkdownBrowserViewProvider(
@@ -89,22 +165,12 @@ export async function activate(
   }
 
   context.subscriptions.push(
-    vscode.languages.registerDocumentLinkProvider(
-      MARKDOWN_SELECTOR,
-      new MarkdownPathLinkProvider(),
-    ),
-    vscode.languages.registerHoverProvider(
-      MARKDOWN_SELECTOR,
-      new MarkdownPathHoverProvider(),
-    ),
-    vscode.languages.registerCodeLensProvider(
-      MARKDOWN_SELECTOR,
-      codeLensProvider,
-    ),
-    vscode.window.registerTreeDataProvider(
+    (recentMarkdownTreeView = vscode.window.createTreeView(
       "markdownHelpers.recentMarkdown",
-      recentMarkdownProvider,
-    ),
+      {
+        treeDataProvider: recentMarkdownProvider,
+      },
+    )),
     vscode.commands.registerCommand("markdownHelpers.refresh", async () => {
       if (!discovery) {
         vscode.window.showWarningMessage(
@@ -114,9 +180,40 @@ export async function activate(
       }
       await discovery.refresh();
       treeProvider?.refresh();
+      await refreshRecentMarkdownViewState();
       codeLensProvider.refresh();
       await browserProvider?.refreshCurrentView();
     }),
+    vscode.commands.registerCommand(
+      "markdownHelpers.enableRecentFilesPrFilter",
+      async () => {
+        await vscode.workspace
+          .getConfiguration("markdownHelpers")
+          .update(
+            "recentFilesFilter",
+            "changedSinceBase",
+            vscode.ConfigurationTarget.Workspace,
+          );
+        await updateRecentMarkdownFilterContext();
+        treeProvider?.refresh();
+        await refreshRecentMarkdownViewState();
+      },
+    ),
+    vscode.commands.registerCommand(
+      "markdownHelpers.disableRecentFilesPrFilter",
+      async () => {
+        await vscode.workspace
+          .getConfiguration("markdownHelpers")
+          .update(
+            "recentFilesFilter",
+            "all",
+            vscode.ConfigurationTarget.Workspace,
+          );
+        await updateRecentMarkdownFilterContext();
+        treeProvider?.refresh();
+        await refreshRecentMarkdownViewState();
+      },
+    ),
     vscode.commands.registerCommand(
       "markdownHelpers.revealPreview",
       async () => {
@@ -210,7 +307,10 @@ export async function activate(
       "markdownHelpers.openCodeBlockAtCursor",
       async () => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.document.languageId !== "markdown") {
+        if (
+          !editor ||
+          !isMarkdownLikeDocument(editor.document, getConfiguredExtensions())
+        ) {
           return;
         }
         const opened = await openCodeBlockAtLine(
@@ -232,10 +332,19 @@ export async function activate(
         return;
       }
       if (event.affectsConfiguration("markdownHelpers.extensions")) {
+        registerEditorFeatures();
         await discovery.refresh();
       }
       if (event.affectsConfiguration("markdownHelpers.maxRecent")) {
         treeProvider?.refresh();
+      }
+      if (
+        event.affectsConfiguration("markdownHelpers.recentFilesFilter") ||
+        event.affectsConfiguration("markdownHelpers.recentFilesBaseRef")
+      ) {
+        await updateRecentMarkdownFilterContext();
+        treeProvider?.refresh();
+        await refreshRecentMarkdownViewState();
       }
       if (event.affectsConfiguration("markdownHelpers.previewMaxWidth")) {
         await browserProvider?.refreshCurrentView();
@@ -248,6 +357,8 @@ export async function activate(
       }
     }),
   );
+
+  await refreshRecentMarkdownViewState();
 }
 
 export function deactivate(): void {
@@ -260,7 +371,10 @@ async function resolveRelativePath(
 ): Promise<string | undefined> {
   if (!target) {
     const activeDocument = vscode.window.activeTextEditor?.document;
-    if (activeDocument?.languageId === "markdown") {
+    if (
+      activeDocument &&
+      isMarkdownLikeDocument(activeDocument, getConfiguredExtensions())
+    ) {
       return discovery.resolveRelativePath(activeDocument.uri);
     }
     return undefined;
@@ -283,7 +397,10 @@ async function resolveUri(
 ): Promise<vscode.Uri | undefined> {
   if (!target) {
     const activeDocument = vscode.window.activeTextEditor?.document;
-    if (activeDocument?.languageId === "markdown") {
+    if (
+      activeDocument &&
+      isMarkdownLikeDocument(activeDocument, getConfiguredExtensions())
+    ) {
       return activeDocument.uri;
     }
     return undefined;

@@ -25,3 +25,4 @@
 - do someting to get good syntax highlighting in the blocks - needs ot be language aware
 - Cap the recent file list to like 100 items -- show the initial path to the file in a compact single line text block below the file `time - heading - word` line
 - Prevent horizontal overflow with really long lines. Force them to break somewhere
+- Need to treat line breaks as new lines - I see bunched lines in the output

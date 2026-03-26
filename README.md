@@ -8,6 +8,8 @@ It adds three initial capabilities:
 - fenced code blocks can be opened into unsaved editors for focused inspection or execution
 - markdown preview is rendered in a dedicated extension panel with a bounded reading width
 
+Source-side editor helpers apply to markdown-like files by suffix as well, so files such as `.prompt.md` and `.instructions.md` are handled even when VS Code does not automatically assign them the `markdown` language mode.
+
 It also sets markdown editors to bounded wrapping at `96` columns by default through extension configuration defaults, so long lines stay readable without changing file contents.
 
 ## Features
@@ -61,13 +63,25 @@ It also sets markdown editors to bounded wrapping at `96` columns by default thr
 - Type: `number`
 - Default: `96`
 
+### `markdownHelpers.recentFilesFilter`
+
+- Type: `"all" | "changedSinceBase"`
+- Default: `"all"`
+
+### `markdownHelpers.recentFilesBaseRef`
+
+- Type: `string`
+- Default: `"main"`
+
 Example `settings.json`:
 
 ```json
 {
   "markdownHelpers.maxRecent": 100,
   "markdownHelpers.previewMaxWidth": 88,
-  "markdownHelpers.extensions": [".md", ".markdown", ".mdx", ".qmd"]
+  "markdownHelpers.extensions": [".md", ".markdown", ".mdx", ".qmd"],
+  "markdownHelpers.recentFilesFilter": "changedSinceBase",
+  "markdownHelpers.recentFilesBaseRef": "origin/main"
 }
 ```
 

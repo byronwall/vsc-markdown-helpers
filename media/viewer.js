@@ -1,22 +1,34 @@
 import { enhancePreview } from "./viewer/markdownRenderer.js";
-import { basename, formatAge, formatWordCount } from "./viewer/shared.js";
+import {
+  basename,
+  dirname,
+  formatAge,
+  formatWordCount,
+} from "./viewer/shared.js";
 
 const vscode = acquireVsCodeApi();
+const narrowLayout = window.matchMedia("(max-width: 960px)");
 
 const state = {
   files: [],
   selectedPath: undefined,
   toc: [],
+  activeHeadingId: undefined,
+  headings: [],
+  filesCollapsed: narrowLayout.matches,
 };
 
 const elements = {
   errorBanner: document.getElementById("errorBanner"),
   filesEmptyState: document.getElementById("filesEmptyState"),
   filesList: document.getElementById("filesList"),
+  filesPanel: document.getElementById("filesPanel"),
   openTextButton: document.getElementById("openTextButton"),
   previewContent: document.getElementById("previewContent"),
+  previewPath: document.getElementById("previewPath"),
   previewTitle: document.getElementById("previewTitle"),
   refreshButton: document.getElementById("refreshButton"),
+  toggleFilesButton: document.getElementById("toggleFilesButton"),
   tocEmptyState: document.getElementById("tocEmptyState"),
   tocList: document.getElementById("tocList"),
 };
@@ -30,6 +42,20 @@ elements.openTextButton.addEventListener("click", () => {
     return;
   }
   vscode.postMessage({ type: "openTextFile", path: state.selectedPath });
+});
+
+elements.toggleFilesButton.addEventListener("click", () => {
+  state.filesCollapsed = !state.filesCollapsed;
+  applyFilesPanelState();
+});
+
+elements.previewContent.addEventListener("scroll", () => {
+  window.requestAnimationFrame(syncActiveHeading);
+});
+
+narrowLayout.addEventListener("change", (event) => {
+  state.filesCollapsed = event.matches;
+  applyFilesPanelState();
 });
 
 window.addEventListener("message", (event) => {
@@ -61,11 +87,13 @@ window.addEventListener("message", (event) => {
 });
 
 vscode.postMessage({ type: "ready" });
+applyFilesPanelState();
 
 function renderFiles() {
   elements.filesList.innerHTML = "";
   const files = state.files;
   elements.filesEmptyState.classList.toggle("hidden", files.length > 0);
+  applyFilesPanelState();
 
   for (const file of files) {
     const button = document.createElement("button");
@@ -83,18 +111,34 @@ function renderFiles() {
     meta.className = "file-row-meta";
     meta.textContent = `${formatAge(file.mtimeMs)} • ${file.headingCount} headings • ${formatWordCount(file.wordCount)}`;
 
-    button.append(title, meta);
+    const location = document.createElement("div");
+    location.className = "file-row-path";
+    location.textContent = dirname(file.relativePath);
+
+    button.append(title, meta, location);
     button.addEventListener("click", () => {
       vscode.postMessage({ type: "openFile", path: file.relativePath });
+      if (narrowLayout.matches) {
+        state.filesCollapsed = true;
+        applyFilesPanelState();
+      }
     });
     elements.filesList.append(button);
   }
 }
 
 function renderPreview(path, html) {
-  elements.previewTitle.textContent = path;
+  elements.previewTitle.textContent = basename(path);
+  elements.previewPath.textContent = path;
+  document.title = `${basename(path)} • Markdown Helpers`;
   elements.previewContent.classList.remove("empty-preview");
   elements.previewContent.innerHTML = html;
+  state.headings = Array.from(
+    elements.previewContent.querySelectorAll(
+      "h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]",
+    ),
+  );
+  state.activeHeadingId = state.headings[0]?.id;
 
   elements.previewContent
     .querySelectorAll("a[data-local-href]")
@@ -109,7 +153,9 @@ function renderPreview(path, html) {
       });
     });
 
-  enhancePreview(elements.previewContent, vscode);
+  void enhancePreview(elements.previewContent, vscode).then(() => {
+    syncActiveHeading();
+  });
 }
 
 function renderToc() {
@@ -121,12 +167,53 @@ function renderToc() {
     button.type = "button";
     button.className = "toc-link";
     button.style.setProperty("--level", String(item.level));
+    button.style.setProperty("--branch-visible", item.level > 1 ? "1" : "0");
+    if (item.id === state.activeHeadingId) {
+      button.classList.add("is-active");
+    }
     button.textContent = item.text;
     button.addEventListener("click", () => {
       const target = document.getElementById(item.id);
       target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      state.activeHeadingId = item.id;
+      renderToc();
     });
     elements.tocList.append(button);
+  }
+}
+
+function applyFilesPanelState() {
+  elements.filesPanel.classList.toggle("is-collapsed", state.filesCollapsed);
+  elements.toggleFilesButton.setAttribute(
+    "aria-expanded",
+    String(!state.filesCollapsed),
+  );
+}
+
+function syncActiveHeading() {
+  if (state.headings.length === 0) {
+    if (state.activeHeadingId !== undefined) {
+      state.activeHeadingId = undefined;
+      renderToc();
+    }
+    return;
+  }
+
+  const containerTop = elements.previewContent.getBoundingClientRect().top;
+  let activeId = state.headings[0].id;
+
+  for (const heading of state.headings) {
+    const distance = heading.getBoundingClientRect().top - containerTop;
+    if (distance <= 84) {
+      activeId = heading.id;
+      continue;
+    }
+    break;
+  }
+
+  if (activeId !== state.activeHeadingId) {
+    state.activeHeadingId = activeId;
+    renderToc();
   }
 }
 

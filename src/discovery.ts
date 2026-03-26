@@ -1,6 +1,10 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { MarkdownLogger } from "./logging";
+import {
+  isMarkdownLikeFilePath,
+  normalizeMarkdownExtensions,
+} from "./markdownFiles";
 import { DiscoverySnapshot, MarkdownFileEntry } from "./types";
 
 const HARD_EXCLUDED_SEGMENTS = new Set([
@@ -206,18 +210,11 @@ function buildIncludeGlob(extensions: string[]): string {
 }
 
 function normalizeExtensions(rawExtensions: string[]): string[] {
-  const fallback = [".md", ".markdown", ".mdx"];
-  const normalized = rawExtensions
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => value.length > 0)
-    .map((value) => (value.startsWith(".") ? value : `.${value}`));
-
-  return normalized.length > 0 ? [...new Set(normalized)] : fallback;
+  return normalizeMarkdownExtensions(rawExtensions);
 }
 
 function matchesExtension(filePath: string, extensions: string[]): boolean {
-  const lower = filePath.toLowerCase();
-  return extensions.some((extension) => lower.endsWith(extension));
+  return isMarkdownLikeFilePath(filePath, extensions);
 }
 
 function containsHardExcludedSegment(candidatePath: string): boolean {

@@ -106,12 +106,9 @@ export class MarkdownCodeBlockCodeLensProvider
   public provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
     return parseFencedCodeBlocks(document).map((block) => {
       const range = new vscode.Range(block.startLine, 0, block.startLine, 0);
-      const title = block.language
-        ? `Open ${block.language} block in untitled editor`
-        : "Open code block in untitled editor";
       return new vscode.CodeLens(range, {
         command: "markdownHelpers.openCodeBlock",
-        title,
+        title: "$(code)",
         arguments: [document.uri, block.startLine],
       });
     });

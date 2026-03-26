@@ -30,3 +30,11 @@ export function basename(value) {
   const parts = value.split("/");
   return parts[parts.length - 1] || value;
 }
+
+export function dirname(value) {
+  const parts = value.split("/");
+  if (parts.length <= 1) {
+    return ".";
+  }
+  return parts.slice(0, -1).join("/");
+}

@@ -9,13 +9,19 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="panel panel-files">
+      <aside id="filesPanel" class="panel panel-files">
         <div class="panel-header">
           <div>
             <p class="eyebrow">Workspace</p>
             <h1>Markdown Files</h1>
           </div>
-          <button id="refreshButton" class="ghost-button" type="button">Refresh</button>
+          <button
+            id="refreshButton"
+            class="ghost-button icon-button icon-refresh"
+            type="button"
+            title="Refresh"
+            aria-label="Refresh"
+          ></button>
         </div>
         <div id="filesEmptyState" class="empty-state hidden">
           No markdown files found.
@@ -28,11 +34,23 @@
           <div>
             <p class="eyebrow">Preview</p>
             <h2 id="previewTitle">Select a markdown file</h2>
+            <p id="previewPath" class="preview-path">Rendered preview stays here.</p>
           </div>
           <div class="preview-actions">
-            <button id="openTextButton" class="ghost-button" type="button">
-              Open Text
-            </button>
+            <button
+              id="toggleFilesButton"
+              class="ghost-button icon-button icon-files files-toggle-button"
+              type="button"
+              title="Toggle file list"
+              aria-label="Toggle file list"
+            ></button>
+            <button
+              id="openTextButton"
+              class="ghost-button icon-button icon-open-text"
+              type="button"
+              title="Open text file"
+              aria-label="Open text file"
+            ></button>
           </div>
         </header>
         <div id="errorBanner" class="error-banner hidden"></div>

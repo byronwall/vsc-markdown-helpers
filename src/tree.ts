@@ -1,7 +1,27 @@
+import { execFile } from "node:child_process";
 import * as path from "node:path";
+import { promisify } from "node:util";
 import * as vscode from "vscode";
 import { MarkdownDiscoveryService } from "./discovery";
 import { MarkdownLogger } from "./logging";
+
+const execFileAsync = promisify(execFile);
+
+export type RecentMarkdownFilterMode = "all" | "changedSinceBase";
+
+export interface RecentMarkdownViewState {
+  description?: string;
+  message?: string;
+  badgeValue?: number;
+  badgeTooltip?: string;
+}
+
+interface ComparisonTarget {
+  baseRef: string;
+  description: string;
+  emptyMessage: string;
+  badgeTooltip: string;
+}
 
 export class RecentMarkdownTreeProvider
   implements vscode.TreeDataProvider<RecentMarkdownItem>, vscode.Disposable
@@ -13,8 +33,11 @@ export class RecentMarkdownTreeProvider
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
+    private readonly workspaceRoot: vscode.Uri,
     private readonly discovery: MarkdownDiscoveryService,
     private readonly getMaxRecent: () => number,
+    private readonly getFilterMode: () => RecentMarkdownFilterMode,
+    private readonly getBaseRef: () => string,
     private readonly logger?: MarkdownLogger,
   ) {
     this.disposables.push(
@@ -28,16 +51,19 @@ export class RecentMarkdownTreeProvider
     return element;
   }
 
-  public getChildren(
+  public async getChildren(
     element?: RecentMarkdownItem,
-  ): Thenable<RecentMarkdownItem[]> {
+  ): Promise<RecentMarkdownItem[]> {
     if (element) {
-      return Promise.resolve([]);
+      return [];
     }
 
     const maxRecent = this.getMaxRecent();
     const snapshot = this.discovery.getSnapshot();
-    const items = snapshot.files.slice(0, maxRecent).map((file) => {
+    const { files: filteredFiles } = await this.resolveFilteredFiles(
+      snapshot.files,
+    );
+    const items = filteredFiles.slice(0, maxRecent).map((file) => {
       const item = new RecentMarkdownItem(
         file.relativePath,
         file.uri,
@@ -61,10 +87,18 @@ export class RecentMarkdownTreeProvider
 
     this.logger?.info("Tree getChildren generated items", {
       totalDiscovered: snapshot.files.length,
+      totalFiltered: filteredFiles.length,
+      filterMode: this.getFilterMode(),
       returned: items.length,
     });
 
-    return Promise.resolve(items);
+    return items;
+  }
+
+  public async getViewState(): Promise<RecentMarkdownViewState> {
+    const snapshot = this.discovery.getSnapshot();
+    const { state } = await this.resolveFilteredFiles(snapshot.files);
+    return state;
   }
 
   public refresh(): void {
@@ -76,6 +110,62 @@ export class RecentMarkdownTreeProvider
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
+  }
+
+  private async resolveFilteredFiles(
+    files: readonly {
+      relativePath: string;
+      uri: vscode.Uri;
+      mtimeMs: number;
+      size: number;
+      headingCount: number;
+      wordCount: number;
+    }[],
+  ): Promise<{ files: typeof files; state: RecentMarkdownViewState }> {
+    if (this.getFilterMode() !== "changedSinceBase") {
+      return {
+        files,
+        state: {
+          description: undefined,
+          message: undefined,
+          badgeValue: undefined,
+          badgeTooltip: undefined,
+        },
+      };
+    }
+
+    const comparisonTarget = await resolveComparisonTarget(
+      this.workspaceRoot,
+      this.getBaseRef(),
+      this.logger,
+    );
+    const changedPaths = await getChangedMarkdownPaths(
+      this.workspaceRoot,
+      comparisonTarget.baseRef,
+      this.logger,
+    );
+    if (!changedPaths) {
+      return {
+        files,
+        state: {
+          description: comparisonTarget.description,
+          message: "Unable to resolve git changes. Showing all markdown files.",
+          badgeValue: files.length,
+          badgeTooltip: comparisonTarget.badgeTooltip,
+        },
+      };
+    }
+
+    const filteredFiles = files.filter((file) => changedPaths.has(file.relativePath));
+    return {
+      files: filteredFiles,
+      state: {
+        description: comparisonTarget.description,
+        message: filteredFiles.length === 0 ? comparisonTarget.emptyMessage : undefined,
+        badgeValue: filteredFiles.length,
+        badgeTooltip: comparisonTarget.badgeTooltip,
+      },
+    };
   }
 }
 
@@ -94,7 +184,7 @@ export class RecentMarkdownItem extends vscode.TreeItem {
     this.resourceUri = uri;
     this.command = {
       command: "markdownHelpers.openMarkdown",
-      title: "Open Markdown Preview",
+      title: "$(preview)",
       arguments: [this],
     };
     this.description = `${formatAge(mtimeMs)} • ${headingCount}h • ${formatCompactCount(wordCount)}w`;
@@ -149,4 +239,169 @@ function formatCompactCount(value: number): string {
 function formatCompactUnit(value: number, unit: string): string {
   const fixed = value >= 10 ? Math.round(value).toString() : value.toFixed(1);
   return `${fixed.replace(/\.0$/, "")}${unit}`;
+}
+
+async function getChangedMarkdownPaths(
+  workspaceRoot: vscode.Uri,
+  baseRef: string,
+  logger?: MarkdownLogger,
+): Promise<Set<string> | undefined> {
+  try {
+    const changedPaths = new Set<string>();
+    const revisionRanges = [`${baseRef}...HEAD`, baseRef];
+
+    for (const revisionRange of revisionRanges) {
+      const stdout = await runGitCommand(workspaceRoot, [
+        "diff",
+        "--name-only",
+        "--diff-filter=ACMRTUXB",
+        revisionRange,
+        "--",
+      ]);
+      if (stdout !== undefined) {
+        addPathsFromGitOutput(changedPaths, stdout);
+        break;
+      }
+    }
+
+    const staged = await runGitCommand(workspaceRoot, [
+      "diff",
+      "--cached",
+      "--name-only",
+      "--diff-filter=ACMRTUXB",
+      "--",
+    ]);
+    if (staged !== undefined) {
+      addPathsFromGitOutput(changedPaths, staged);
+    }
+
+    const unstaged = await runGitCommand(workspaceRoot, [
+      "diff",
+      "--name-only",
+      "--diff-filter=ACMRTUXB",
+      "--",
+    ]);
+    if (unstaged !== undefined) {
+      addPathsFromGitOutput(changedPaths, unstaged);
+    }
+
+    const untracked = await runGitCommand(workspaceRoot, [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "--",
+    ]);
+    if (untracked !== undefined) {
+      addPathsFromGitOutput(changedPaths, untracked);
+    }
+
+    return changedPaths;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger?.warn("Unable to compute changed markdown filter", {
+      workspaceRoot: workspaceRoot.fsPath,
+      baseRef,
+      message,
+    });
+    return undefined;
+  }
+}
+
+async function resolveComparisonTarget(
+  workspaceRoot: vscode.Uri,
+  fallbackBaseRef: string,
+  logger?: MarkdownLogger,
+): Promise<ComparisonTarget> {
+  const pullRequest = await getActivePullRequest(workspaceRoot, logger);
+  if (pullRequest?.baseRefName) {
+    return {
+      baseRef: pullRequest.baseRefName,
+      description: `PR #${pullRequest.number} vs ${pullRequest.baseRefName}`,
+      emptyMessage: `No markdown files changed in active PR #${pullRequest.number} against ${pullRequest.baseRefName}.`,
+      badgeTooltip: `Markdown files changed in active PR #${pullRequest.number} against ${pullRequest.baseRefName}`,
+    };
+  }
+
+  const baseRef = fallbackBaseRef.trim() || "main";
+  return {
+    baseRef,
+    description: `Changed vs ${baseRef}`,
+    emptyMessage: `No markdown files changed against ${baseRef}.`,
+    badgeTooltip: `Markdown files changed against ${baseRef}`,
+  };
+}
+
+async function getActivePullRequest(
+  workspaceRoot: vscode.Uri,
+  logger?: MarkdownLogger,
+): Promise<{ number: number; baseRefName: string } | undefined> {
+  try {
+    const currentBranch = await runGitCommand(workspaceRoot, [
+      "rev-parse",
+      "--abbrev-ref",
+      "HEAD",
+    ]);
+    const branchName = currentBranch?.trim();
+    if (!branchName) {
+      return undefined;
+    }
+
+    const { stdout } = await execFileAsync(
+      "gh",
+      ["pr", "view", "--json", "number,state,baseRefName,headRefName"],
+      { cwd: workspaceRoot.fsPath },
+    );
+    const parsed = JSON.parse(stdout) as {
+      number?: number;
+      state?: string;
+      baseRefName?: string;
+      headRefName?: string;
+    };
+
+    if (
+      parsed.state !== "OPEN" ||
+      !parsed.baseRefName ||
+      (parsed.headRefName && parsed.headRefName !== branchName)
+    ) {
+      return undefined;
+    }
+
+    return {
+      number: parsed.number ?? 0,
+      baseRefName: parsed.baseRefName,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger?.info("No active pull request detected for current branch", {
+      workspaceRoot: workspaceRoot.fsPath,
+      message,
+    });
+    return undefined;
+  }
+}
+
+async function runGitCommand(
+  workspaceRoot: vscode.Uri,
+  args: string[],
+): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", [
+      "-C",
+      workspaceRoot.fsPath,
+      ...args,
+    ]);
+    return stdout;
+  } catch {
+    return undefined;
+  }
+}
+
+function addPathsFromGitOutput(target: Set<string>, stdout: string): void {
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    target.add(trimmed);
+  }
 }

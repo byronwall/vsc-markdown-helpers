@@ -27,41 +27,58 @@
         "commands": [
             {
                 "command": "markdownHelpers.refresh",
-                "title": "Markdown Helpers: Refresh"
+                "title": "$(refresh)",
+                "icon": "$(refresh)"
             },
             {
                 "command": "markdownHelpers.showOutput",
-                "title": "Markdown Helpers: Show Output"
+                "title": "$(output)",
+                "icon": "$(output)"
+            },
+            {
+                "command": "markdownHelpers.enableRecentFilesPrFilter",
+                "title": "$(filter)",
+                "icon": "$(filter)"
+            },
+            {
+                "command": "markdownHelpers.disableRecentFilesPrFilter",
+                "title": "$(list-unordered)",
+                "icon": "$(list-unordered)"
             },
             {
                 "command": "markdownHelpers.openMarkdown",
-                "title": "Markdown Helpers: Open Markdown Preview"
+                "title": "$(preview)",
+                "icon": "$(preview)"
             },
             {
                 "command": "markdownHelpers.openMarkdownFile",
-                "title": "Markdown Helpers: Open Markdown File",
+                "title": "$(go-to-file)",
                 "icon": "$(go-to-file)"
             },
             {
                 "command": "markdownHelpers.copyMarkdownPath",
-                "title": "Markdown Helpers: Copy Markdown Full Path",
+                "title": "$(copy)",
                 "icon": "$(copy)"
             },
             {
                 "command": "markdownHelpers.revealPreview",
-                "title": "Markdown Helpers: Reveal Preview"
+                "title": "$(preview)",
+                "icon": "$(preview)"
             },
             {
                 "command": "markdownHelpers.openLocation",
-                "title": "Markdown Helpers: Open Linked File Location"
+                "title": "$(go-to-file)",
+                "icon": "$(go-to-file)"
             },
             {
                 "command": "markdownHelpers.openCodeBlock",
-                "title": "Markdown Helpers: Open Code Block"
+                "title": "$(code)",
+                "icon": "$(code)"
             },
             {
                 "command": "markdownHelpers.openCodeBlockAtCursor",
-                "title": "Markdown Helpers: Open Code Block At Cursor"
+                "title": "$(code)",
+                "icon": "$(code)"
             }
         ],
         "viewsContainers": {
@@ -84,9 +101,19 @@
         "menus": {
             "view/title": [
                 {
+                    "command": "markdownHelpers.enableRecentFilesPrFilter",
+                    "when": "view == markdownHelpers.recentMarkdown && !markdownHelpers.recentMarkdownPrFilterEnabled",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "markdownHelpers.disableRecentFilesPrFilter",
+                    "when": "view == markdownHelpers.recentMarkdown && markdownHelpers.recentMarkdownPrFilterEnabled",
+                    "group": "navigation@1"
+                },
+                {
                     "command": "markdownHelpers.refresh",
                     "when": "view == markdownHelpers.recentMarkdown",
-                    "group": "navigation"
+                    "group": "navigation@2"
                 }
             ],
             "view/item/context": [
@@ -103,14 +130,9 @@
             ],
             "editor/title": [
                 {
-                    "command": "markdownHelpers.openCodeBlockAtCursor",
-                    "when": "resourceLangId == markdown",
-                    "group": "navigation@20"
-                },
-                {
                     "command": "markdownHelpers.openMarkdown",
-                    "when": "resourceLangId == markdown",
-                    "group": "navigation@21"
+                    "when": "resourceLangId == markdown || resourceExtname == .md || resourceExtname == .markdown || resourceExtname == .mdx",
+                    "group": "navigation@1"
                 }
             ]
         },
@@ -142,6 +164,20 @@
                     "minimum": 48,
                     "maximum": 180,
                     "description": "Maximum rendered markdown content width, in characters, inside the preview panel."
+                },
+                "markdownHelpers.recentFilesFilter": {
+                    "type": "string",
+                    "enum": [
+                        "all",
+                        "changedSinceBase"
+                    ],
+                    "default": "all",
+                    "description": "Filter the Recent Markdown tree to either all discovered markdown files or only files changed on the current branch relative to the configured base ref, including local staged, unstaged, and untracked changes."
+                },
+                "markdownHelpers.recentFilesBaseRef": {
+                    "type": "string",
+                    "default": "main",
+                    "description": "Git base ref used when recentFilesFilter is changedSinceBase. Examples: main, origin/main, upstream/main."
                 }
             }
         },
@@ -154,7 +190,10 @@
     },
     "scripts": {
         "vscode:prepublish": "pnpm run compile",
-        "compile": "tsc -p ./",
+        "bundle:extension": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=out/extension.js",
+        "bundle:webview": "esbuild media/viewer.entry.js --bundle --format=esm --platform=browser --minify --legal-comments=none --outfile=media/viewer.bundle.js",
+        "typecheck": "tsc -p ./ --noEmit",
+        "compile": "pnpm run typecheck && pnpm run bundle:extension && pnpm run bundle:webview",
         "watch": "tsc -watch -p ./",
         "package:vsix": "pnpm run compile && vsce package --no-dependencies -o vsc-md-helpers.vsix",
         "install:vsix": "code --install-extension vsc-md-helpers.vsix --force",
@@ -162,9 +201,19 @@
         "dev:host": "code --extensionDevelopmentPath=$PWD $PWD"
     },
     "devDependencies": {
+        "@types/markdown-it": "^14.1.2",
         "@types/node": "^22.10.1",
         "@types/vscode": "^1.95.0",
         "@vscode/vsce": "^3.7.1",
+        "esbuild": "^0.27.4",
         "typescript": "^5.7.2"
+    },
+    "dependencies": {
+        "gray-matter": "^4.0.3",
+        "highlight.js": "^11.11.1",
+        "markdown-it": "^14.1.1",
+        "markdown-it-anchor": "^9.2.0",
+        "mermaid": "^11.13.0",
+        "svg-pan-zoom": "^3.6.2"
     }
 }

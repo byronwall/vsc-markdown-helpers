@@ -19,6 +19,14 @@ figcaption {
   line-height: 1.68;
 }
 
+summary {
+  list-style: none;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
 a {
   color: var(--accent);
 }
@@ -51,6 +59,49 @@ samp {
 .ghost-button:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.icon-button {
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-button::before {
+  content: "";
+  width: 1.05rem;
+  height: 1.05rem;
+  background-color: currentColor;
+  mask: var(--icon-mask) center / contain no-repeat;
+  -webkit-mask: var(--icon-mask) center / contain no-repeat;
+}
+
+.icon-refresh {
+  --icon-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='black' d='M8 2a5.98 5.98 0 0 1 4.24 1.76L14 5.52V2h1v6h-6v-1h4.02l-1.49-1.49A5 5 0 1 0 13 9h1a6 6 0 1 1-6-7Z'/%3E%3C/svg%3E");
+}
+
+.icon-open-text {
+  --icon-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='black' d='M4 1h5.5L13 4.5V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1Zm5 1H4v12h8V5H9V2Zm-3 5h4v1H6V7Zm0 2h4v1H6V9Zm0 2h3v1H6v-1Z'/%3E%3Cpath fill='black' d='m10.15 7.85 3.5-3.5.7.7-3.5 3.5h2.65v1h-4.35V5.2h1v2.65Z'/%3E%3C/svg%3E");
+}
+
+.icon-open-code {
+  --icon-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='black' d='M5.35 3.15 1.5 7l3.85 3.85.7-.7L2.91 7l3.14-3.15-.7-.7Zm5.3 0-.7.7L13.09 7l-3.14 3.15.7.7L14.5 7l-3.85-3.85Z'/%3E%3Cpath fill='black' d='M7.47 12.5h1.06l2-9H9.47l-2 9Z'/%3E%3C/svg%3E");
+}
+
+.icon-files {
+  --icon-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='black' d='M2 3.5A1.5 1.5 0 0 1 3.5 2h3.38c.4 0 .78.16 1.06.44l.62.62c.1.1.23.16.38.16H12.5A1.5 1.5 0 0 1 14 4.74v7.76A1.5 1.5 0 0 1 12.5 14h-9A1.5 1.5 0 0 1 2 12.5v-9Zm1.5-.5a.5.5 0 0 0-.5.5V5h10V4.74a.5.5 0 0 0-.5-.5H8.94a1.5 1.5 0 0 1-1.06-.44l-.62-.62A.53.53 0 0 0 6.88 3H3.5Zm-.5 3v6.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5V6H3Z'/%3E%3C/svg%3E");
+}
+
+.preview-path {
+  margin: 0.32rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.84rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .empty-state,
@@ -119,13 +170,55 @@ samp {
   font-size: 0.84rem;
 }
 
+.file-row-path {
+  margin-top: 0.28rem;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .toc-link {
-  padding-left: calc(0.7rem + (var(--level, 1) - 1) * 0.75rem);
+  position: relative;
+  padding-left: calc(1rem + (var(--level, 1) - 1) * 0.9rem);
+}
+
+.toc-link::before {
+  content: "";
+  position: absolute;
+  left: calc(0.48rem + (var(--level, 1) - 1) * 0.9rem);
+  top: -0.8rem;
+  bottom: -0.8rem;
+  width: 1px;
+  background: var(--line-strong);
+  opacity: calc(var(--branch-visible, 0) * 0.85);
+}
+
+.toc-link::after {
+  content: "";
+  position: absolute;
+  left: calc(0.48rem + (var(--level, 1) - 1) * 0.9rem);
+  top: 50%;
+  width: 0.65rem;
+  height: 1px;
+  background: var(--line-strong);
+  opacity: calc(var(--branch-visible, 0) * 0.85);
+}
+
+.toc-link.is-active {
+  background: color-mix(in srgb, var(--accent-soft) 88%, white);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
 }
 
 .preview-content.empty-preview {
   display: flex;
   align-items: center;
+}
+
+.preview-content {
+  overflow-wrap: anywhere;
 }
 
 .preview-content h1,
@@ -141,7 +234,8 @@ samp {
 .preview-content ol,
 .preview-content blockquote,
 .preview-content table,
-.preview-content pre {
+.preview-content pre,
+.preview-content details {
   margin-top: 0.8rem;
   margin-bottom: 0.8rem;
 }
@@ -165,6 +259,8 @@ samp {
   padding: 0;
   background: transparent;
   color: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .preview-content blockquote {
@@ -176,6 +272,7 @@ samp {
 .preview-content table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .preview-content th,
@@ -207,4 +304,115 @@ samp {
   border-radius: 999px;
   padding: 0.35rem 0.7rem;
   cursor: pointer;
+  font: inherit;
+}
+
+.preview-content a.preview-link {
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.preview-content a.is-markdown-link {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 55%, white);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+
+.preview-content a.is-file-link {
+  color: var(--accent-warm);
+  border-bottom-color: color-mix(in srgb, var(--accent-warm) 30%, transparent);
+}
+
+.front-matter-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+.front-matter-card summary {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+}
+
+.front-matter-title {
+  font-weight: 700;
+}
+
+.front-matter-summary {
+  min-width: 0;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.front-matter-body {
+  border-top: 1px solid var(--line);
+  padding: 0 1rem 1rem;
+}
+
+.front-matter-body table {
+  margin-bottom: 0;
+}
+
+.front-matter-body th {
+  width: 24%;
+  color: var(--ink-muted);
+}
+
+.front-matter-body td {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mermaid-card {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+.mermaid-toolbar {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--accent-soft) 45%, white);
+}
+
+.mermaid-actions {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.mermaid-toolbar .code-block-button {
+  border-color: var(--line-strong);
+  background: var(--surface-strong);
+  color: var(--ink);
+}
+
+.mermaid-diagram-frame {
+  overflow: hidden;
+  background: white;
+}
+
+.mermaid-diagram {
+  min-height: 28rem;
+}
+
+.mermaid-diagram svg {
+  min-height: 28rem;
+}
+
+.mermaid-source {
+  margin: 0;
+  border-radius: 0;
+}
+
+.mermaid-error {
+  padding: 1rem;
+  color: var(--error);
 }
