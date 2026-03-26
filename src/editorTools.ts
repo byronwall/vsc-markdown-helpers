@@ -1,6 +1,7 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { normalizeMarkdownExtensions } from "./markdownFiles";
 import {
   CodeBlockMatch,
   FileLocationTarget,
@@ -38,6 +39,8 @@ const MAX_DIRECTORY_PREVIEW_ENTRIES = 20;
 interface PathTokenMatch {
   rawValue: string;
   range: vscode.Range;
+  startOffset: number;
+  endOffset: number;
 }
 
 interface PreviewSelection {
@@ -51,27 +54,30 @@ export class MarkdownPathLinkProvider implements vscode.DocumentLinkProvider {
   public async provideDocumentLinks(
     document: vscode.TextDocument,
   ): Promise<vscode.DocumentLink[]> {
-    const links: vscode.DocumentLink[] = [];
+    const matches = getResolvableLinkMatches(document);
+    const links = await Promise.all(
+      matches.map(async ({ rawValue, range }) => {
+        const target = await resolveWorkspacePath(rawValue, document.uri);
+        if (!target) {
+          return undefined;
+        }
 
-    for (const match of getPathTokenMatches(document)) {
-      const { rawValue, range } = match;
-      const target = await resolveWorkspacePath(rawValue, document.uri);
-      if (!target) {
-        continue;
-      }
+        const args = encodeURIComponent(
+          JSON.stringify([toCommandTarget(target)]),
+        );
+        const link = new vscode.DocumentLink(
+          range,
+          vscode.Uri.parse(`command:markdownHelpers.openLocation?${args}`),
+        );
+        link.tooltip = formatLinkTooltip(target);
+        return link;
+      }),
+    );
 
-      const args = encodeURIComponent(
-        JSON.stringify([toCommandTarget(target)]),
-      );
-      const link = new vscode.DocumentLink(
-        range,
-        vscode.Uri.parse(`command:markdownHelpers.openLocation?${args}`),
-      );
-      link.tooltip = formatLinkTooltip(target);
-      links.push(link);
-    }
-
-    return links;
+    return links.filter(
+      (link): link is vscode.DocumentLink =>
+        link instanceof vscode.DocumentLink,
+    );
   }
 }
 
@@ -80,7 +86,7 @@ export class MarkdownPathHoverProvider implements vscode.HoverProvider {
     document: vscode.TextDocument,
     position: vscode.Position,
   ): Promise<vscode.Hover | undefined> {
-    const match = getPathTokenMatches(document).find((candidate) =>
+    const match = getResolvableLinkMatches(document).find((candidate) =>
       candidate.range.contains(position),
     );
     if (!match) {
@@ -253,22 +259,26 @@ function buildCandidateUris(
   rawPath: string,
   contextUri?: vscode.Uri,
 ): vscode.Uri[] {
-  const normalizedPath = expandHome(rawPath);
+  const pathVariants = buildPathVariants(rawPath);
   const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
   const candidates = new Map<string, vscode.Uri>();
 
-  if (path.isAbsolute(normalizedPath)) {
-    const absoluteUri = vscode.Uri.file(normalizedPath);
-    candidates.set(absoluteUri.fsPath, absoluteUri);
+  for (const normalizedPath of pathVariants) {
+    if (path.isAbsolute(normalizedPath)) {
+      const absoluteUri = vscode.Uri.file(normalizedPath);
+      candidates.set(absoluteUri.fsPath, absoluteUri);
 
-    const workspaceRelative = normalizedPath.replace(/^\/+/, "");
-    for (const folder of workspaceFolders) {
-      const rootedUri = vscode.Uri.file(
-        path.join(folder.uri.fsPath, workspaceRelative),
-      );
-      candidates.set(rootedUri.fsPath, rootedUri);
+      const workspaceRelative = normalizedPath.replace(/^\/+/, "");
+      for (const folder of workspaceFolders) {
+        const rootedUri = vscode.Uri.file(
+          path.join(folder.uri.fsPath, workspaceRelative),
+        );
+        candidates.set(rootedUri.fsPath, rootedUri);
+      }
+
+      continue;
     }
-  } else {
+
     if (contextUri?.scheme === "file") {
       const relativeUri = vscode.Uri.file(
         path.resolve(path.dirname(contextUri.fsPath), normalizedPath),
@@ -304,7 +314,7 @@ function parseTarget(rawTarget: string):
       anchor?: string;
     }
   | undefined {
-  const trimmed = rawTarget.trim().replace(/^`|`$/g, "");
+  const trimmed = normalizeTargetValue(rawTarget);
   if (!trimmed) {
     return undefined;
   }
@@ -333,16 +343,19 @@ function parseTarget(rawTarget: string):
     };
   }
 
-  const anchorIndex = trimmed.indexOf("#");
+  const queryIndex = trimmed.indexOf("?");
+  const withoutQuery = queryIndex >= 0 ? trimmed.slice(0, queryIndex) : trimmed;
+
+  const anchorIndex = withoutQuery.indexOf("#");
   if (anchorIndex > 0) {
     return {
-      path: trimmed.slice(0, anchorIndex),
-      anchor: trimmed.slice(anchorIndex + 1),
+      path: withoutQuery.slice(0, anchorIndex),
+      anchor: withoutQuery.slice(anchorIndex + 1),
     };
   }
 
   return {
-    path: trimmed,
+    path: withoutQuery,
   };
 }
 
@@ -389,6 +402,22 @@ function isLikelyUrl(value: string): boolean {
   return /^(https?|mailto):/i.test(value);
 }
 
+function getResolvableLinkMatches(
+  document: vscode.TextDocument,
+): PathTokenMatch[] {
+  const markdownMatches = getMarkdownLinkMatches(document);
+  const matches = [...markdownMatches];
+
+  for (const match of getPathTokenMatches(document)) {
+    if (hasOverlappingMatch(markdownMatches, match)) {
+      continue;
+    }
+    matches.push(match);
+  }
+
+  return matches;
+}
+
 function getPathTokenMatches(document: vscode.TextDocument): PathTokenMatch[] {
   const text = document.getText();
   const matches: PathTokenMatch[] = [];
@@ -403,6 +432,8 @@ function getPathTokenMatches(document: vscode.TextDocument): PathTokenMatch[] {
     const endOffset = startOffset + rawValue.length;
     matches.push({
       rawValue,
+      startOffset,
+      endOffset,
       range: new vscode.Range(
         document.positionAt(startOffset),
         document.positionAt(endOffset),
@@ -411,6 +442,319 @@ function getPathTokenMatches(document: vscode.TextDocument): PathTokenMatch[] {
   }
 
   return matches;
+}
+
+function getMarkdownLinkMatches(
+  document: vscode.TextDocument,
+): PathTokenMatch[] {
+  const text = document.getText();
+  const matches = [
+    ...getInlineMarkdownLinkMatches(text),
+    ...getReferenceDefinitionMatches(text),
+  ];
+
+  return matches
+    .filter(
+      (match) => match.rawValue.length > 0 && !isLikelyUrl(match.rawValue),
+    )
+    .map((match) => ({
+      ...match,
+      range: new vscode.Range(
+        document.positionAt(match.startOffset),
+        document.positionAt(match.endOffset),
+      ),
+    }));
+}
+
+function getInlineMarkdownLinkMatches(
+  text: string,
+): Array<Omit<PathTokenMatch, "range">> {
+  const matches: Array<Omit<PathTokenMatch, "range">> = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const openBracketIndex = text.indexOf("[", cursor);
+    if (openBracketIndex < 0) {
+      break;
+    }
+
+    if (
+      isEscapedCharacter(text, openBracketIndex) ||
+      text[openBracketIndex - 1] === "!"
+    ) {
+      cursor = openBracketIndex + 1;
+      continue;
+    }
+
+    const closeBracketIndex = findMatchingBracket(text, openBracketIndex + 1);
+    if (closeBracketIndex < 0 || text[closeBracketIndex + 1] !== "(") {
+      cursor = openBracketIndex + 1;
+      continue;
+    }
+
+    const linkTarget = parseInlineLinkTarget(text, closeBracketIndex + 1);
+    if (!linkTarget) {
+      cursor = closeBracketIndex + 1;
+      continue;
+    }
+
+    matches.push({
+      rawValue: linkTarget.rawValue,
+      startOffset: openBracketIndex,
+      endOffset: linkTarget.endOffset,
+    });
+    cursor = linkTarget.endOffset;
+  }
+
+  return matches;
+}
+
+function getReferenceDefinitionMatches(
+  text: string,
+): Array<Omit<PathTokenMatch, "range">> {
+  const matches: Array<Omit<PathTokenMatch, "range">> = [];
+  const linePattern = /^\s{0,3}\[[^\]]+\]:\s*(<[^>]+>|\S+)/gm;
+
+  for (const match of text.matchAll(linePattern)) {
+    const rawValue = normalizeTargetValue(match[1]);
+    if (!rawValue) {
+      continue;
+    }
+
+    const fullMatch = match[0] ?? "";
+    const targetIndexInMatch = fullMatch.lastIndexOf(match[1]);
+    if (targetIndexInMatch < 0) {
+      continue;
+    }
+
+    const startOffset = (match.index ?? 0) + targetIndexInMatch;
+    const endOffset = startOffset + match[1].length;
+    matches.push({
+      rawValue,
+      startOffset,
+      endOffset,
+    });
+  }
+
+  return matches;
+}
+
+function findMatchingBracket(text: string, startOffset: number): number {
+  let depth = 0;
+
+  for (let index = startOffset; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === "\\") {
+      index += 1;
+      continue;
+    }
+
+    if (character === "[") {
+      depth += 1;
+      continue;
+    }
+
+    if (character !== "]") {
+      continue;
+    }
+
+    if (depth === 0) {
+      return index;
+    }
+
+    depth -= 1;
+  }
+
+  return -1;
+}
+
+function parseInlineLinkTarget(
+  text: string,
+  openParenIndex: number,
+): { rawValue: string; endOffset: number } | undefined {
+  let cursor = openParenIndex + 1;
+  while (cursor < text.length && /\s/.test(text[cursor])) {
+    cursor += 1;
+  }
+
+  if (cursor >= text.length || text[cursor] === ")") {
+    return undefined;
+  }
+
+  let rawValue = "";
+  if (text[cursor] === "<") {
+    const closeIndex = findDelimitedTargetEnd(text, cursor + 1, ">", false);
+    if (closeIndex < 0) {
+      return undefined;
+    }
+    rawValue = normalizeTargetValue(text.slice(cursor + 1, closeIndex));
+    cursor = closeIndex + 1;
+  } else {
+    const destinationStart = cursor;
+    let nestedParenDepth = 0;
+
+    while (cursor < text.length) {
+      const character = text[cursor];
+      if (character === "\\") {
+        cursor += 2;
+        continue;
+      }
+
+      if (/\s/.test(character)) {
+        break;
+      }
+
+      if (character === "(") {
+        nestedParenDepth += 1;
+        cursor += 1;
+        continue;
+      }
+
+      if (character === ")") {
+        if (nestedParenDepth === 0) {
+          break;
+        }
+        nestedParenDepth -= 1;
+      }
+
+      cursor += 1;
+    }
+
+    rawValue = normalizeTargetValue(text.slice(destinationStart, cursor));
+  }
+
+  if (!rawValue) {
+    return undefined;
+  }
+
+  while (cursor < text.length && /\s/.test(text[cursor])) {
+    cursor += 1;
+  }
+
+  const closeParenIndex = findDelimitedTargetEnd(text, cursor, ")", true);
+  if (closeParenIndex < 0) {
+    return undefined;
+  }
+
+  return {
+    rawValue,
+    endOffset: closeParenIndex + 1,
+  };
+}
+
+function findDelimitedTargetEnd(
+  text: string,
+  startOffset: number,
+  delimiter: ")" | ">",
+  allowTitles: boolean,
+): number {
+  let quoteCloser: string | undefined;
+
+  for (let index = startOffset; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === "\\") {
+      index += 1;
+      continue;
+    }
+
+    if (quoteCloser) {
+      if (character === quoteCloser) {
+        quoteCloser = undefined;
+      }
+      continue;
+    }
+
+    if (allowTitles) {
+      if (character === '"' || character === "'") {
+        quoteCloser = character;
+        continue;
+      }
+
+      if (character === "(") {
+        quoteCloser = ")";
+        continue;
+      }
+    }
+
+    if (character === delimiter) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function isEscapedCharacter(text: string, index: number): boolean {
+  let slashCount = 0;
+  for (
+    let cursor = index - 1;
+    cursor >= 0 && text[cursor] === "\\";
+    cursor -= 1
+  ) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
+
+function hasOverlappingMatch(
+  matches: PathTokenMatch[],
+  candidate: Pick<PathTokenMatch, "startOffset" | "endOffset">,
+): boolean {
+  return matches.some(
+    (match) =>
+      candidate.startOffset < match.endOffset &&
+      candidate.endOffset > match.startOffset,
+  );
+}
+
+function buildPathVariants(rawPath: string): string[] {
+  const normalizedPath = normalizeTargetValue(rawPath);
+  if (!normalizedPath) {
+    return [];
+  }
+
+  const expandedPath = expandHome(normalizedPath);
+  const variants = new Set<string>([expandedPath]);
+  const hasTrailingSlash = /[\\/]$/.test(expandedPath);
+  const trimmedPath = expandedPath.replace(/[\\/]+$/, "");
+  const extension = path.extname(trimmedPath);
+
+  if (!extension) {
+    for (const markdownExtension of getConfiguredMarkdownExtensions()) {
+      variants.add(`${trimmedPath}${markdownExtension}`);
+      if (trimmedPath.length > 0) {
+        variants.add(path.join(trimmedPath, `README${markdownExtension}`));
+      }
+    }
+  }
+
+  if (hasTrailingSlash && trimmedPath.length > 0) {
+    variants.add(trimmedPath);
+  }
+
+  return [...variants];
+}
+
+function getConfiguredMarkdownExtensions(): string[] {
+  const configured = vscode.workspace
+    .getConfiguration("markdownHelpers")
+    .get<string[]>("extensions", [".md", ".markdown", ".mdx"]);
+  return normalizeMarkdownExtensions(configured);
+}
+
+function normalizeTargetValue(rawTarget: string): string {
+  let value = rawTarget.trim().replace(/^`|`$/g, "");
+  if (value.startsWith("<") && value.endsWith(">")) {
+    value = value.slice(1, -1).trim();
+  }
+
+  try {
+    value = decodeURIComponent(value);
+  } catch {
+    // Keep the original text if the target is only partially encoded.
+  }
+
+  return value;
 }
 
 function toResolvedTarget(

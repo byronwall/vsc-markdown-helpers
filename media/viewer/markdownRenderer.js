@@ -26,35 +26,44 @@ export async function enhancePreview(container, tools) {
 }
 
 async function enhanceLocalLinks(container, tools) {
-  container.querySelectorAll("a[data-local-href]").forEach((anchor) => {
-    activateLocalLink(anchor, tools);
-  });
+  const localAnchors = Array.from(
+    container.querySelectorAll("a[data-local-href]"),
+  );
 
   const textNodes = collectLinkableTextNodes(container);
-  if (textNodes.length === 0) {
-    return;
+  const hrefs = new Set();
+  for (const anchor of localAnchors) {
+    const href = anchor.getAttribute("data-local-href");
+    if (href) {
+      hrefs.add(href);
+    }
   }
 
-  const hrefs = new Set();
   for (const node of textNodes) {
     for (const match of getPathTokenMatches(node.textContent || "")) {
       hrefs.add(match.rawValue);
     }
   }
 
-  if (hrefs.size === 0) {
-    return;
+  const resolvedByHref = new Map();
+  if (hrefs.size > 0) {
+    const resolutions = await tools.requestResolvedLocalLinks([...hrefs]);
+    for (const entry of resolutions) {
+      if (entry && typeof entry.href === "string") {
+        resolvedByHref.set(entry.href, entry);
+      }
+    }
   }
 
-  const resolutions = await tools.requestResolvedLocalLinks([...hrefs]);
-  const resolvedByHref = new Map(
-    resolutions
-      .filter((entry) => entry && typeof entry.href === "string")
-      .map((entry) => [entry.href, entry]),
-  );
-
-  if (resolvedByHref.size === 0) {
-    return;
+  for (const anchor of localAnchors) {
+    const href = anchor.getAttribute("data-local-href");
+    if (href) {
+      const resolution = resolvedByHref.get(href);
+      if (resolution) {
+        applyResolvedLocalLinkMetadata(anchor, resolution);
+      }
+    }
+    activateLocalLink(anchor, tools);
   }
 
   for (const node of textNodes) {
@@ -109,11 +118,7 @@ async function enhanceCodeBlocks(container, tools) {
     const source = code.textContent || "";
     const lineCount = countLines(source);
 
-    if (language && hljs.getLanguage(language)) {
-      hljs.highlightElement(code);
-    } else {
-      code.classList.add("hljs");
-    }
+    applySyntaxHighlighting(code, language);
 
     const wrapper = document.createElement("div");
     wrapper.className = "code-block-card";
@@ -408,11 +413,7 @@ function createCodeModalContent(source, language) {
     code.className = `language-${language}`;
   }
   code.textContent = source;
-  if (language && hljs.getLanguage(language)) {
-    hljs.highlightElement(code);
-  } else {
-    code.classList.add("hljs");
-  }
+  applySyntaxHighlighting(code, language);
 
   pre.append(code);
   wrapper.append(pre);
@@ -798,16 +799,28 @@ function replacePathTokensInTextNode(node, tools, resolvedByHref) {
 
 function createLocalLinkAnchor(rawValue, resolution) {
   const anchor = document.createElement("a");
-  const kind = resolution.isMarkdown ? "markdown" : "file";
   anchor.href = "#";
-  anchor.className = `preview-link preview-detected-link ${kind === "markdown" ? "is-markdown-link" : "is-file-link"}`;
+  anchor.className = "preview-link preview-detected-link";
   anchor.dataset.localHref = rawValue;
-  anchor.dataset.linkKind = kind;
-  if (typeof resolution.tooltip === "string" && resolution.tooltip.length > 0) {
-    anchor.dataset.previewTooltip = resolution.tooltip;
-  }
+  applyResolvedLocalLinkMetadata(anchor, resolution);
   anchor.textContent = rawValue;
   return anchor;
+}
+
+function applyResolvedLocalLinkMetadata(anchor, resolution) {
+  const kind = resolution.isMarkdown ? "markdown" : "file";
+  anchor.dataset.linkKind = kind;
+  anchor.classList.remove("is-markdown-link", "is-file-link");
+  anchor.classList.add(
+    kind === "markdown" ? "is-markdown-link" : "is-file-link",
+  );
+
+  if (typeof resolution.tooltip === "string" && resolution.tooltip.length > 0) {
+    anchor.dataset.previewTooltip = resolution.tooltip;
+    return;
+  }
+
+  delete anchor.dataset.previewTooltip;
 }
 
 function activateLocalLink(anchor, tools) {
@@ -1015,11 +1028,7 @@ function renderLocalLinkHoverPreview(card, preview) {
     }
     code.textContent = preview.code;
 
-    if (preview.language && hljs.getLanguage(preview.language)) {
-      hljs.highlightElement(code);
-    } else {
-      code.classList.add("hljs");
-    }
+    applySyntaxHighlighting(code, preview.language);
 
     pre.append(code);
     fragment.append(pre);
@@ -1277,6 +1286,45 @@ function getLanguageLabel(code) {
     value.startsWith("language-"),
   );
   return match ? match.slice("language-".length) : "";
+}
+
+function applySyntaxHighlighting(code, language) {
+  const resolvedLanguage = resolveHighlightLanguage(language);
+  if (resolvedLanguage) {
+    code.classList.remove(
+      ...[...code.classList].filter((value) => value.startsWith("language-")),
+    );
+    code.classList.add(`language-${resolvedLanguage}`);
+    hljs.highlightElement(code);
+    return;
+  }
+
+  code.classList.add("hljs");
+}
+
+function resolveHighlightLanguage(language) {
+  if (!language) {
+    return undefined;
+  }
+
+  const candidates = getHighlightLanguageCandidates(language);
+  return candidates.find((candidate) => hljs.getLanguage(candidate));
+}
+
+function getHighlightLanguageCandidates(language) {
+  const normalized = language.trim().toLowerCase();
+  const aliases = {
+    javascriptreact: ["tsx", "jsx", "typescript", "javascript"],
+    typescriptreact: ["tsx", "typescript", "jsx", "javascript"],
+    javascript: ["javascript", "js"],
+    typescript: ["typescript", "ts"],
+    jsx: ["jsx", "javascript", "xml"],
+    tsx: ["tsx", "typescript", "jsx", "javascript"],
+    shellscript: ["bash", "shell", "sh"],
+  };
+
+  const extra = aliases[normalized] ?? [];
+  return [normalized, ...extra];
 }
 
 function uid(prefix) {
