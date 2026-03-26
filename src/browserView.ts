@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { MarkdownDiscoveryService } from "./discovery";
 import { openUntitledCodeDocument, resolveWorkspacePath } from "./editorTools";
 import { MarkdownLogger } from "./logging";
+import { isMarkdownLikeFilePath } from "./markdownFiles";
 import { renderMarkdownDocument } from "./previewRenderer";
 import { RenderedMarkdownDocument } from "./types";
 
@@ -25,6 +26,7 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
     private readonly extensionUri: vscode.Uri,
     private readonly discovery: MarkdownDiscoveryService,
     private readonly getPreviewMaxWidth: () => number,
+    private readonly getMarkdownExtensions: () => string[],
     private readonly logger?: MarkdownLogger,
   ) {
     this.disposables.push(
@@ -241,7 +243,11 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
     }
 
     const relativePath = await this.discovery.resolveRelativePath(target.uri);
-    if (target.kind === "file" && relativePath) {
+    const isMarkdownTarget =
+      target.kind === "file" &&
+      isMarkdownLikeFilePath(target.uri.fsPath, this.getMarkdownExtensions());
+
+    if (isMarkdownTarget && relativePath) {
       await this.revealAndOpenByRelativePath(relativePath);
       if (typeof target.line === "number") {
         await showDocument(

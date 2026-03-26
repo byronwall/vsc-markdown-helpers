@@ -195,6 +195,7 @@ async function enhanceMermaidBlocks(container, tools) {
         title: "Mermaid diagram",
         subtitle: `${lineCount} lines of source`,
         content: diagramStage,
+        immersive: true,
         wide: true,
       });
 
@@ -298,6 +299,8 @@ async function renderMermaidDiagram(container, source, panZoomOptions) {
 
   svgElement.setAttribute("width", "100%");
   svgElement.setAttribute("height", "100%");
+  svgElement.style.width = "100%";
+  svgElement.style.height = "100%";
   const panZoom = svgPanZoom(svgElement, {
     zoomEnabled: true,
     controlIconsEnabled: true,

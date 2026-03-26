@@ -19,6 +19,7 @@ const state = {
   modalCleanup: undefined,
   modalFocusReturnTarget: undefined,
   modalToken: 0,
+  modalImmersive: false,
 };
 
 let elements;
@@ -78,12 +79,20 @@ function initialize() {
     }
   });
 
-  elements.previewContent.addEventListener("scroll", () => {
-    window.requestAnimationFrame(syncActiveHeading);
+  elements.previewContent.addEventListener(
+    "scroll",
+    scheduleSyncActiveHeading,
+    {
+      passive: true,
+    },
+  );
+
+  window.addEventListener("scroll", scheduleSyncActiveHeading, {
+    passive: true,
   });
 
-  window.addEventListener("resize", () => {
-    window.requestAnimationFrame(syncActiveHeading);
+  window.addEventListener("resize", scheduleSyncActiveHeading, {
+    passive: true,
   });
 
   document.addEventListener("click", (event) => {
@@ -235,6 +244,11 @@ function renderPreview(path, html) {
     ),
   );
   state.activeHeadingId = state.headings[0]?.id;
+  debugToc("renderPreview", {
+    path,
+    tocItems: state.toc.length,
+    headingCount: state.headings.length,
+  });
 
   elements.previewContent
     .querySelectorAll("a[data-local-href]")
@@ -261,6 +275,10 @@ function renderPreview(path, html) {
 function renderToc() {
   elements.tocList.innerHTML = "";
   elements.tocEmptyState.classList.toggle("hidden", state.toc.length > 0);
+  debugToc("renderToc", {
+    tocItems: state.toc.length,
+    activeHeadingId: state.activeHeadingId,
+  });
 
   for (const item of state.toc) {
     const button = document.createElement("button");
@@ -273,12 +291,16 @@ function renderToc() {
     }
     button.textContent = item.text;
     button.addEventListener("click", () => {
-      const target = document.getElementById(item.id);
+      const target = getHeadingElement(item.id);
       if (target) {
-        elements.previewContent.scrollTo({
-          top: Math.max(target.offsetTop - 28, 0),
-          behavior: "smooth",
+        const scrollTarget = getScrollTargetForElement(target);
+        debugToc("tocClick", {
+          id: item.id,
+          top: scrollTarget.top,
+          currentScrollTop: getCurrentScrollTop(),
+          scrollContext: scrollTarget.context,
         });
+        scrollToHeadingTarget(scrollTarget);
       }
       state.activeHeadingId = item.id;
       renderToc();
@@ -326,11 +348,13 @@ function syncActiveHeading() {
     return;
   }
 
-  const scrollTop = elements.previewContent.scrollTop + 120;
+  const scrollContext = getScrollContext();
+  const activationOffset = 120;
   let activeId = state.headings[0].id;
 
   for (const heading of state.headings) {
-    if (heading.offsetTop <= scrollTop) {
+    const top = getHeadingTopInScrollContext(heading, scrollContext);
+    if (top <= scrollContext.top + activationOffset) {
       activeId = heading.id;
       continue;
     }
@@ -338,6 +362,12 @@ function syncActiveHeading() {
   }
 
   if (activeId !== state.activeHeadingId) {
+    debugToc("activeHeadingChanged", {
+      previous: state.activeHeadingId,
+      next: activeId,
+      scrollTop: scrollContext.top,
+      scrollContext: scrollContext.kind,
+    });
     state.activeHeadingId = activeId;
     renderToc();
   }
@@ -380,12 +410,20 @@ async function copyText(text) {
 }
 
 function showModal(options) {
-  const { content, onClose, subtitle, title, wide = false } = options;
+  const {
+    content,
+    immersive = false,
+    onClose,
+    subtitle,
+    title,
+    wide = false,
+  } = options;
 
   cleanupModal();
   const modalToken = ++state.modalToken;
   state.modalCleanup = typeof onClose === "function" ? onClose : undefined;
   state.modalFocusReturnTarget = document.activeElement;
+  state.modalImmersive = Boolean(immersive);
 
   elements.modalTitle.textContent = title || "Preview";
   elements.modalSubtitle.textContent = subtitle || "";
@@ -394,6 +432,7 @@ function showModal(options) {
   elements.modalShell.classList.remove("hidden");
   elements.modalShell.setAttribute("aria-hidden", "false");
   elements.modalShell.classList.toggle("is-wide", Boolean(wide));
+  elements.modalShell.classList.toggle("is-immersive", state.modalImmersive);
   document.body.classList.add("has-modal");
   window.requestAnimationFrame(() => {
     elements.modalCloseButton.focus();
@@ -427,11 +466,13 @@ function hideModal(options = {}) {
   elements.modalShell.classList.add("hidden");
   elements.modalShell.setAttribute("aria-hidden", "true");
   elements.modalShell.classList.remove("is-wide");
+  elements.modalShell.classList.remove("is-immersive");
   elements.modalContent.replaceChildren();
   elements.modalTitle.textContent = "Preview";
   elements.modalSubtitle.textContent = "";
   elements.modalSubtitle.classList.add("hidden");
   document.body.classList.remove("has-modal");
+  state.modalImmersive = false;
 
   if (options.restoreFocus === false) {
     state.modalFocusReturnTarget = undefined;
@@ -462,4 +503,99 @@ function ensureActiveTocItemVisible() {
     block: "nearest",
     inline: "nearest",
   });
+}
+
+function getHeadingElement(id) {
+  if (!id || typeof CSS === "undefined" || typeof CSS.escape !== "function") {
+    return document.getElementById(id);
+  }
+
+  return elements.previewContent.querySelector(`#${CSS.escape(id)}`);
+}
+
+function getPreviewScrollTopForElement(element) {
+  const previewRect = elements.previewContent.getBoundingClientRect();
+  const targetRect = element.getBoundingClientRect();
+  return Math.max(
+    elements.previewContent.scrollTop + targetRect.top - previewRect.top - 28,
+    0,
+  );
+}
+
+function scheduleSyncActiveHeading() {
+  window.requestAnimationFrame(syncActiveHeading);
+}
+
+function getScrollContext() {
+  const scrollingElement =
+    document.scrollingElement || document.documentElement;
+  if (isScrollable(elements.previewContent)) {
+    return {
+      kind: "preview",
+      top: elements.previewContent.scrollTop,
+    };
+  }
+
+  return {
+    kind: "document",
+    top: scrollingElement.scrollTop,
+  };
+}
+
+function getScrollTargetForElement(element) {
+  const scrollContext = getScrollContext();
+  if (scrollContext.kind === "preview") {
+    return {
+      context: scrollContext.kind,
+      top: getPreviewScrollTopForElement(element),
+    };
+  }
+
+  return {
+    context: scrollContext.kind,
+    top: getDocumentScrollTopForElement(element),
+  };
+}
+
+function getDocumentScrollTopForElement(element) {
+  const scrollingElement =
+    document.scrollingElement || document.documentElement;
+  const targetRect = element.getBoundingClientRect();
+  return Math.max(scrollingElement.scrollTop + targetRect.top - 28, 0);
+}
+
+function scrollToHeadingTarget(target) {
+  if (target.context === "preview") {
+    elements.previewContent.scrollTo({ top: target.top, behavior: "smooth" });
+    return;
+  }
+
+  window.scrollTo({ top: target.top, behavior: "smooth" });
+}
+
+function getHeadingTopInScrollContext(heading, scrollContext) {
+  if (scrollContext.kind === "preview") {
+    const previewRect = elements.previewContent.getBoundingClientRect();
+    return (
+      heading.getBoundingClientRect().top -
+      previewRect.top +
+      elements.previewContent.scrollTop
+    );
+  }
+
+  const scrollingElement =
+    document.scrollingElement || document.documentElement;
+  return heading.getBoundingClientRect().top + scrollingElement.scrollTop;
+}
+
+function getCurrentScrollTop() {
+  return getScrollContext().top;
+}
+
+function isScrollable(element) {
+  return element.scrollHeight > element.clientHeight + 1;
+}
+
+function debugToc(event, details) {
+  console.debug("[Markdown Helpers][TOC]", event, details);
 }

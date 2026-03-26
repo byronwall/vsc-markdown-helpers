@@ -150,6 +150,7 @@ export async function activate(
         context.extensionUri,
         discovery,
         getPreviewMaxWidth,
+        getConfiguredExtensions,
         logger,
       );
 

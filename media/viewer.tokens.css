@@ -19,9 +19,20 @@
   --radius-md: 16px;
   --radius-sm: 10px;
   --content-width: 96ch;
+  --content-width-cap: 52rem;
   --sidebar-width: 18rem;
   --outline-width: 16rem;
   --code-line-height: 1.55rem;
+  --code-bg: #f7f2e8;
+  --code-bg-strong: #efe6d7;
+  --code-line: rgba(128, 92, 40, 0.18);
+  --code-ink: #2b2823;
+  --code-muted: #6c6459;
+  --code-accent: #0d6756;
+  --code-keyword: #8a2f4d;
+  --code-string: #8f5b14;
+  --code-number: #4f5fa8;
+  --code-comment: #7a8074;
   --font-sans:
     "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
   --font-ui: "Avenir Next", "Segoe UI", sans-serif;
