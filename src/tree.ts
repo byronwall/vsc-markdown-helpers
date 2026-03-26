@@ -156,12 +156,17 @@ export class RecentMarkdownTreeProvider
       };
     }
 
-    const filteredFiles = files.filter((file) => changedPaths.has(file.relativePath));
+    const filteredFiles = files.filter((file) =>
+      changedPaths.has(file.relativePath),
+    );
     return {
       files: filteredFiles,
       state: {
         description: comparisonTarget.description,
-        message: filteredFiles.length === 0 ? comparisonTarget.emptyMessage : undefined,
+        message:
+          filteredFiles.length === 0
+            ? comparisonTarget.emptyMessage
+            : undefined,
         badgeValue: filteredFiles.length,
         badgeTooltip: comparisonTarget.badgeTooltip,
       },

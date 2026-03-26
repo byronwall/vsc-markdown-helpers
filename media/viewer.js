@@ -7,7 +7,6 @@ import {
 } from "./viewer/shared.js";
 
 const vscode = acquireVsCodeApi();
-const narrowLayout = window.matchMedia("(max-width: 960px)");
 
 const state = {
   files: [],
@@ -15,7 +14,7 @@ const state = {
   toc: [],
   activeHeadingId: undefined,
   headings: [],
-  filesCollapsed: narrowLayout.matches,
+  filesCollapsed: true,
 };
 
 const elements = {
@@ -45,17 +44,36 @@ elements.openTextButton.addEventListener("click", () => {
 });
 
 elements.toggleFilesButton.addEventListener("click", () => {
-  state.filesCollapsed = !state.filesCollapsed;
-  applyFilesPanelState();
+  setFilesPanelCollapsed(!state.filesCollapsed);
 });
 
 elements.previewContent.addEventListener("scroll", () => {
   window.requestAnimationFrame(syncActiveHeading);
 });
 
-narrowLayout.addEventListener("change", (event) => {
-  state.filesCollapsed = event.matches;
-  applyFilesPanelState();
+document.addEventListener("click", (event) => {
+  if (state.filesCollapsed) {
+    return;
+  }
+
+  if (!(event.target instanceof Node)) {
+    return;
+  }
+
+  if (
+    elements.filesPanel.contains(event.target) ||
+    elements.toggleFilesButton.contains(event.target)
+  ) {
+    return;
+  }
+
+  setFilesPanelCollapsed(true);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !state.filesCollapsed) {
+    setFilesPanelCollapsed(true, { returnFocus: true });
+  }
 });
 
 window.addEventListener("message", (event) => {
@@ -118,10 +136,7 @@ function renderFiles() {
     button.append(title, meta, location);
     button.addEventListener("click", () => {
       vscode.postMessage({ type: "openFile", path: file.relativePath });
-      if (narrowLayout.matches) {
-        state.filesCollapsed = true;
-        applyFilesPanelState();
-      }
+      setFilesPanelCollapsed(true);
     });
     elements.filesList.append(button);
   }
@@ -184,10 +199,29 @@ function renderToc() {
 
 function applyFilesPanelState() {
   elements.filesPanel.classList.toggle("is-collapsed", state.filesCollapsed);
+  elements.filesPanel.setAttribute("aria-hidden", String(state.filesCollapsed));
   elements.toggleFilesButton.setAttribute(
     "aria-expanded",
     String(!state.filesCollapsed),
   );
+  elements.toggleFilesButton.setAttribute(
+    "aria-label",
+    state.filesCollapsed ? "Show markdown files" : "Hide markdown files",
+  );
+}
+
+function setFilesPanelCollapsed(collapsed, options = {}) {
+  state.filesCollapsed = collapsed;
+  applyFilesPanelState();
+
+  if (!collapsed) {
+    elements.filesPanel.focus();
+    return;
+  }
+
+  if (options.returnFocus) {
+    elements.toggleFilesButton.focus();
+  }
 }
 
 function syncActiveHeading() {

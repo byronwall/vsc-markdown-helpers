@@ -9,25 +9,44 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside id="filesPanel" class="panel panel-files">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Workspace</p>
-            <h1>Markdown Files</h1>
+      <div class="workspace-picker">
+        <button
+          id="toggleFilesButton"
+          class="ghost-button icon-button icon-files workspace-picker-toggle"
+          type="button"
+          title="Choose markdown file"
+          aria-label="Choose markdown file"
+          aria-controls="filesPanel"
+          aria-expanded="false"
+          aria-haspopup="dialog"
+        ></button>
+
+        <aside
+          id="filesPanel"
+          class="panel panel-files is-collapsed"
+          aria-label="Markdown files"
+          aria-hidden="true"
+          tabindex="-1"
+        >
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Workspace</p>
+              <h1>Markdown Files</h1>
+            </div>
+            <button
+              id="refreshButton"
+              class="ghost-button icon-button icon-refresh"
+              type="button"
+              title="Refresh"
+              aria-label="Refresh"
+            ></button>
           </div>
-          <button
-            id="refreshButton"
-            class="ghost-button icon-button icon-refresh"
-            type="button"
-            title="Refresh"
-            aria-label="Refresh"
-          ></button>
-        </div>
-        <div id="filesEmptyState" class="empty-state hidden">
-          No markdown files found.
-        </div>
-        <div id="filesList" class="files-list" role="list"></div>
-      </aside>
+          <div id="filesEmptyState" class="empty-state hidden">
+            No markdown files found.
+          </div>
+          <div id="filesList" class="files-list" role="list"></div>
+        </aside>
+      </div>
 
       <main class="panel panel-preview">
         <header class="preview-header">
@@ -37,13 +56,6 @@
             <p id="previewPath" class="preview-path">Rendered preview stays here.</p>
           </div>
           <div class="preview-actions">
-            <button
-              id="toggleFilesButton"
-              class="ghost-button icon-button icon-files files-toggle-button"
-              type="button"
-              title="Toggle file list"
-              aria-label="Toggle file list"
-            ></button>
             <button
               id="openTextButton"
               class="ghost-button icon-button icon-open-text"
@@ -59,7 +71,7 @@
             <p class="eyebrow">Rendered HTML</p>
             <h3>Markdown preview lives here</h3>
             <p>
-              Pick a markdown file from the left to render it as HTML with a bounded reading width.
+              Pick a markdown file from the top-left library button to render it here with a bounded reading width.
             </p>
           </div>
         </article>

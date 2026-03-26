@@ -26,3 +26,13 @@
 - Cap the recent file list to like 100 items -- show the initial path to the file in a compact single line text block below the file `time - heading - word` line
 - Prevent horizontal overflow with really long lines. Force them to break somewhere
 - Need to treat line breaks as new lines - I see bunched lines in the output
+
+New
+
+- Code blocks should overflow horizontally instead of wrapping
+- Only show the first 15 lines of code in the markodwn preview, add an "expand to show" button, add a button in the code block header that opens the full code sample in a new modal
+- Code blocks need a copy button in the header that copies the full code block to clipboard
+- TOC needs to track the active header as you scroll and indicate it in the TOC with a different color or highlight or something
+- Mermaid diagram viewer should also have a button to open the diagram in a new modal to see the full thing if it's really big
+- Scroll bars in webview look terrible since thye match the raw VS Code theme - need to customize them to look better in the webview, match the overall aesthetic of the webview instead of the raw theme
+- Markdown viewer file list should have a small input box to filter teh available files by name or path - this would be really helpful when there are a lot of files in the list
