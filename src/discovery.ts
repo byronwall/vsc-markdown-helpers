@@ -92,13 +92,14 @@ export class MarkdownDiscoveryService implements vscode.Disposable {
   public async resolveRelativePath(
     uri: vscode.Uri,
   ): Promise<string | undefined> {
-    const rootPath = this.workspaceRoot.fsPath;
-    if (!uri.fsPath.startsWith(rootPath)) {
+    const relativePath = this.getWorkspaceRelativePath(uri);
+    if (!relativePath) {
       return undefined;
     }
 
-    const relativePath = toPosix(path.relative(rootPath, uri.fsPath));
-    if (!relativePath || relativePath.startsWith("..")) {
+    if (
+      !matchesExtension(uri.fsPath, normalizeExtensions(this.getExtensions()))
+    ) {
       return undefined;
     }
 
@@ -109,6 +110,20 @@ export class MarkdownDiscoveryService implements vscode.Disposable {
       }
       this.files.set(entry.relativePath, entry);
       this.fireChange();
+    }
+
+    return relativePath;
+  }
+
+  public getWorkspaceRelativePath(uri: vscode.Uri): string | undefined {
+    const rootPath = this.workspaceRoot.fsPath;
+    if (!uri.fsPath.startsWith(rootPath)) {
+      return undefined;
+    }
+
+    const relativePath = toPosix(path.relative(rootPath, uri.fsPath));
+    if (!relativePath || relativePath.startsWith("..")) {
+      return undefined;
     }
 
     return relativePath;
@@ -160,16 +175,23 @@ export class MarkdownDiscoveryService implements vscode.Disposable {
     absolutePath: string,
   ): Promise<MarkdownFileEntry | undefined> {
     try {
+      if (
+        !matchesExtension(
+          absolutePath,
+          normalizeExtensions(this.getExtensions()),
+        )
+      ) {
+        return undefined;
+      }
+
       const uri = vscode.Uri.file(absolutePath);
       const stat = await vscode.workspace.fs.stat(uri);
       if ((stat.type & vscode.FileType.File) === 0) {
         return undefined;
       }
 
-      const relativePath = toPosix(
-        path.relative(this.workspaceRoot.fsPath, absolutePath),
-      );
-      if (!relativePath || relativePath.startsWith("..")) {
+      const relativePath = this.getWorkspaceRelativePath(uri);
+      if (!relativePath) {
         return undefined;
       }
 

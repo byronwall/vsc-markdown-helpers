@@ -1,7 +1,11 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { CodeBlockMatch, FileLocationTarget } from "./types";
+import {
+  CodeBlockMatch,
+  FileLocationTarget,
+  LocalLinkHoverPreview,
+} from "./types";
 
 const LANGUAGE_ALIASES = new Map<string, string>([
   ["bash", "shellscript"],
@@ -88,7 +92,8 @@ export class MarkdownPathHoverProvider implements vscode.HoverProvider {
       return undefined;
     }
 
-    const contents = await buildHoverContents(target);
+    const preview = await buildLinkHoverPreview(target);
+    const contents = await buildHoverContents(target, preview);
     if (contents.length === 0) {
       return undefined;
     }
@@ -454,104 +459,96 @@ function getTargetKind(
 
 async function buildHoverContents(
   target: FileLocationTarget,
+  preview?: LocalLinkHoverPreview,
 ): Promise<vscode.MarkdownString[]> {
-  if (target.kind === "file") {
-    return buildFileHoverContents(target);
+  const resolvedPreview = preview ?? (await buildLinkHoverPreview(target));
+  const summary = createTrustedMarkdown();
+
+  if (resolvedPreview.note) {
+    summary.appendMarkdown(
+      `Warning: ${escapeMarkdownLabel(resolvedPreview.note)}\n\n`,
+    );
   }
 
-  const summary = createTrustedMarkdown();
   summary.appendMarkdown(
-    `**Folder:** [${escapeMarkdownLabel(getDisplayPath(target.uri))}](${createOpenLocationCommandUri(target)})`,
+    `**${resolvedPreview.kind === "file" ? "File" : "Folder"}:** [${escapeMarkdownLabel(resolvedPreview.displayPath)}](${createOpenLocationCommandUri(target)})`,
   );
 
-  const details = await createDirectoryHoverDetails(target);
+  if (resolvedPreview.location) {
+    summary.appendMarkdown(
+      `  \n_${escapeMarkdownLabel(resolvedPreview.location)}_`,
+    );
+  }
+
+  const details = createHoverDetailsFromPreview(resolvedPreview);
   return details ? [summary, details] : [summary];
 }
 
-async function buildFileHoverContents(
+export async function buildLinkHoverPreview(
   target: FileLocationTarget,
-): Promise<vscode.MarkdownString[]> {
+): Promise<LocalLinkHoverPreview> {
+  if (target.kind === "file") {
+    return buildFileLinkHoverPreview(target);
+  }
+
+  return buildDirectoryLinkHoverPreview(target);
+}
+
+async function buildFileLinkHoverPreview(
+  target: FileLocationTarget,
+): Promise<LocalLinkHoverPreview> {
+  const displayPath = getDisplayPath(target.uri);
+
   try {
     const document = await vscode.workspace.openTextDocument(target.uri);
     const preview = selectPreviewRange(document, target);
-    const summary = createTrustedMarkdown();
 
-    if (preview.note) {
-      summary.appendMarkdown(
-        `Warning: ${escapeMarkdownLabel(preview.note)}\n\n`,
-      );
+    if (document.lineCount === 0) {
+      return {
+        kind: "file",
+        displayPath,
+        location: formatHoverLocation(target, preview),
+        note: preview.note,
+        message: "Empty file.",
+      };
     }
 
-    summary.appendMarkdown(
-      `**File:** [${escapeMarkdownLabel(getDisplayPath(target.uri))}](${createOpenLocationCommandUri(target)})`,
-    );
-
-    const location = formatHoverLocation(target, preview);
-    if (location) {
-      summary.appendMarkdown(`  \n_${location}_`);
+    const lines: string[] = [];
+    for (
+      let lineIndex = preview.startLine;
+      lineIndex <= preview.endLine;
+      lineIndex += 1
+    ) {
+      lines.push(document.lineAt(lineIndex).text);
     }
 
-    const details = createFileHoverDetails(document, target, preview);
-    return details ? [summary, details] : [summary];
+    return {
+      kind: "file",
+      displayPath,
+      location: formatHoverLocation(target, preview),
+      note: preview.note,
+      language: getLanguageIdForUri(target.uri),
+      code: lines.join("\n"),
+      footer: createFilePreviewFooter(document, target, preview),
+    };
   } catch (error) {
-    const summary = createTrustedMarkdown();
-    summary.appendMarkdown(
-      `**File:** [${escapeMarkdownLabel(getDisplayPath(target.uri))}](${createOpenLocationCommandUri(target)})`,
-    );
-
     const details = new vscode.MarkdownString();
     const message = error instanceof Error ? error.message : String(error);
     details.appendMarkdown(
       `_Preview unavailable: ${escapeMarkdownLabel(message)}_`,
     );
-    return [summary, details];
+    return {
+      kind: "file",
+      displayPath,
+      message: `Preview unavailable: ${message}`,
+    };
   }
 }
 
-function createFileHoverDetails(
-  document: vscode.TextDocument,
+async function buildDirectoryLinkHoverPreview(
   target: FileLocationTarget,
-  preview: PreviewSelection,
-): vscode.MarkdownString | undefined {
-  if (document.lineCount === 0) {
-    const empty = new vscode.MarkdownString();
-    empty.appendMarkdown("_Empty file._");
-    return empty;
-  }
-
-  const lines: string[] = [];
-  for (
-    let lineIndex = preview.startLine;
-    lineIndex <= preview.endLine;
-    lineIndex += 1
-  ) {
-    lines.push(document.lineAt(lineIndex).text);
-  }
-
-  const details = new vscode.MarkdownString();
-  details.appendCodeblock(lines.join("\n"), getLanguageIdForUri(target.uri));
-
-  if (preview.truncated) {
-    const remaining = document.lineCount - (preview.endLine + 1);
-    details.appendMarkdown(
-      `\n\n_Showing ${preview.endLine - preview.startLine + 1} lines.${remaining > 0 ? ` ${remaining} more lines not shown.` : ""}_`,
-    );
-  } else if (
-    target.line === undefined &&
-    document.lineCount > preview.endLine + 1
-  ) {
-    details.appendMarkdown(
-      `\n\n_Showing first ${preview.endLine - preview.startLine + 1} lines of ${document.lineCount}._`,
-    );
-  }
-
-  return details;
-}
-
-async function createDirectoryHoverDetails(
-  target: FileLocationTarget,
-): Promise<vscode.MarkdownString> {
-  const details = createTrustedMarkdown();
+): Promise<LocalLinkHoverPreview> {
+  const displayPath = getDisplayPath(target.uri);
 
   try {
     const entries = await vscode.workspace.fs.readDirectory(target.uri);
@@ -562,38 +559,81 @@ async function createDirectoryHoverDetails(
     );
 
     if (visibleEntries.length === 0) {
-      details.appendMarkdown("_Folder is empty._");
-      return details;
-    }
-
-    details.appendMarkdown("**Entries**\n\n");
-    for (const [name, fileType] of visibleEntries) {
-      const childUri = vscode.Uri.joinPath(target.uri, name);
-      const isDirectory = (fileType & vscode.FileType.Directory) !== 0;
-      const childTarget: FileLocationTarget = {
-        uri: childUri,
-        kind: isDirectory ? "directory" : "file",
+      return {
+        kind: "directory",
+        displayPath,
+        message: "Folder is empty.",
       };
-      const label = isDirectory ? `${name}/` : name;
-      details.appendMarkdown(
-        `- [${escapeMarkdownLabel(label)}](${createOpenLocationCommandUri(childTarget)})\n`,
-      );
     }
 
-    if (sortedEntries.length > visibleEntries.length) {
-      details.appendMarkdown(
-        `\n_Showing first ${visibleEntries.length} of ${sortedEntries.length} entries._`,
-      );
-    }
-
-    return details;
+    return {
+      kind: "directory",
+      displayPath,
+      entries: visibleEntries.map(([name, fileType]) => {
+        const isDirectory = (fileType & vscode.FileType.Directory) !== 0;
+        const childUri = vscode.Uri.joinPath(target.uri, name);
+        return {
+          label: isDirectory ? `${name}/` : name,
+          path: childUri.fsPath,
+          kind: isDirectory ? "directory" : "file",
+        };
+      }),
+      footer:
+        sortedEntries.length > visibleEntries.length
+          ? `Showing first ${visibleEntries.length} of ${sortedEntries.length} entries.`
+          : undefined,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    details.appendMarkdown(
-      `_Folder preview unavailable: ${escapeMarkdownLabel(message)}_`,
-    );
-    return details;
+    return {
+      kind: "directory",
+      displayPath,
+      message: `Folder preview unavailable: ${message}`,
+    };
   }
+}
+
+function createHoverDetailsFromPreview(
+  preview: LocalLinkHoverPreview,
+): vscode.MarkdownString | undefined {
+  const details = createTrustedMarkdown();
+
+  if (preview.kind === "file") {
+    if (preview.code) {
+      details.appendCodeblock(preview.code, preview.language ?? "plaintext");
+    } else if (preview.message) {
+      details.appendMarkdown(`_${escapeMarkdownLabel(preview.message)}_`);
+    }
+
+    if (preview.footer) {
+      details.appendMarkdown(`\n\n_${escapeMarkdownLabel(preview.footer)}_`);
+    }
+
+    return preview.code || preview.message || preview.footer
+      ? details
+      : undefined;
+  }
+
+  if (Array.isArray(preview.entries) && preview.entries.length > 0) {
+    details.appendMarkdown("**Entries**\n\n");
+    for (const entry of preview.entries) {
+      details.appendMarkdown(
+        `- [${escapeMarkdownLabel(entry.label)}](${createOpenLocationCommandUri({ uri: vscode.Uri.file(entry.path), kind: entry.kind })})\n`,
+      );
+    }
+  } else if (preview.message) {
+    details.appendMarkdown(`_${escapeMarkdownLabel(preview.message)}_`);
+  }
+
+  if (preview.footer) {
+    details.appendMarkdown(
+      `\n${preview.entries?.length ? "" : "\n"}_${escapeMarkdownLabel(preview.footer)}_`,
+    );
+  }
+
+  return preview.entries?.length || preview.message || preview.footer
+    ? details
+    : undefined;
 }
 
 function createTrustedMarkdown(): vscode.MarkdownString {
@@ -646,6 +686,23 @@ function formatHoverLocation(
   if (typeof displayStartLine === "number") {
     return `Showing line ${displayStartLine}`;
   }
+  return undefined;
+}
+
+function createFilePreviewFooter(
+  document: vscode.TextDocument,
+  target: FileLocationTarget,
+  preview: PreviewSelection,
+): string | undefined {
+  if (preview.truncated) {
+    const remaining = document.lineCount - (preview.endLine + 1);
+    return `Showing ${preview.endLine - preview.startLine + 1} lines.${remaining > 0 ? ` ${remaining} more lines not shown.` : ""}`;
+  }
+
+  if (target.line === undefined && document.lineCount > preview.endLine + 1) {
+    return `Showing first ${preview.endLine - preview.startLine + 1} lines of ${document.lineCount}.`;
+  }
+
   return undefined;
 }
 

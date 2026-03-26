@@ -2,11 +2,19 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { MarkdownDiscoveryService } from "./discovery";
-import { openUntitledCodeDocument, resolveWorkspacePath } from "./editorTools";
+import {
+  buildLinkHoverPreview,
+  openUntitledCodeDocument,
+  resolveWorkspacePath,
+} from "./editorTools";
 import { MarkdownLogger } from "./logging";
 import { isMarkdownLikeFilePath } from "./markdownFiles";
 import { renderMarkdownDocument } from "./previewRenderer";
-import { FileLocationTarget, RenderedMarkdownDocument } from "./types";
+import {
+  FileLocationTarget,
+  LocalLinkHoverPreview,
+  RenderedMarkdownDocument,
+} from "./types";
 
 interface WebviewFileSummary {
   relativePath: string;
@@ -240,6 +248,11 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
           await this.resolvePreviewLinks(typed.requestId, typed.hrefs);
         }
         break;
+      case "resolvePreviewLinkHover":
+        if (typed.requestId && typed.href) {
+          await this.resolvePreviewLinkHover(typed.requestId, typed.href);
+        }
+        break;
       default:
         break;
     }
@@ -267,18 +280,20 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
           return undefined;
         }
 
-        const relativePath = await this.discovery.resolveRelativePath(
-          target.uri,
-        );
+        const isMarkdownTarget =
+          target.kind === "file" &&
+          isMarkdownLikeFilePath(
+            target.uri.fsPath,
+            this.getMarkdownExtensions(),
+          );
+
+        const relativePath = isMarkdownTarget
+          ? this.discovery.getWorkspaceRelativePath(target.uri)
+          : undefined;
         return {
           href,
           kind: target.kind,
-          isMarkdown:
-            target.kind === "file" &&
-            isMarkdownLikeFilePath(
-              target.uri.fsPath,
-              this.getMarkdownExtensions(),
-            ),
+          isMarkdown: isMarkdownTarget,
           tooltip: formatPreviewLinkTooltip(target, relativePath),
         };
       }),
@@ -288,6 +303,29 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
       type: "previewLinksResolved",
       requestId,
       results: resolvedResults.filter((result) => result !== undefined),
+    });
+  }
+
+  private async resolvePreviewLinkHover(
+    requestId: string,
+    href: string,
+  ): Promise<void> {
+    if (!this.panel) {
+      return;
+    }
+
+    const baseUri = this.selectedPath
+      ? this.discovery.getByRelativePath(this.selectedPath)?.uri
+      : undefined;
+    const target = await resolveWorkspacePath(href, baseUri);
+    const result: LocalLinkHoverPreview | undefined = target
+      ? await buildLinkHoverPreview(target)
+      : undefined;
+
+    await this.panel.webview.postMessage({
+      type: "previewLinkHoverResolved",
+      requestId,
+      result,
     });
   }
 

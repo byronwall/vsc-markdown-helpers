@@ -11,6 +11,10 @@ const SORT_COLLATOR = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: "base",
 });
+let localLinkHoverCard;
+let localLinkHoverActiveGroup;
+let localLinkHoverRequestToken = 0;
+let localLinkHoverListenersBound = false;
 
 export async function enhancePreview(container, tools) {
   await Promise.all([
@@ -230,7 +234,6 @@ async function enhanceTables(container, tools) {
       const modalParts = createTableModalContent(model);
       tools.showModal({
         title: model.caption || "Table tools",
-        subtitle: `${model.rows.length} ${model.rows.length === 1 ? "row" : "rows"} • ${model.headers.length} ${model.headers.length === 1 ? "column" : "columns"}`,
         content: modalParts.content,
         headerContent: modalParts.header,
         wide: true,
@@ -544,7 +547,7 @@ function createTableModalContent(model) {
       });
     }
 
-    summary.textContent = `${rows.length} of ${model.rows.length} rows visible`;
+    summary.textContent = `${rows.length} of ${model.rows.length} rows visible • ${visibleColumns.length} of ${model.headers.length} columns shown`;
 
     toggles
       .querySelectorAll("input[type='checkbox']")
@@ -801,7 +804,7 @@ function createLocalLinkAnchor(rawValue, resolution) {
   anchor.dataset.localHref = rawValue;
   anchor.dataset.linkKind = kind;
   if (typeof resolution.tooltip === "string" && resolution.tooltip.length > 0) {
-    anchor.title = resolution.tooltip;
+    anchor.dataset.previewTooltip = resolution.tooltip;
   }
   anchor.textContent = rawValue;
   return anchor;
@@ -850,22 +853,240 @@ function activateLocalLink(anchor, tools) {
     "is-file-link",
     anchor.dataset.linkKind !== "markdown",
   );
+  group.dataset.localHref = href;
 
-  if (group.querySelector(".preview-link-action")) {
+  if (anchor.dataset.previewTooltip) {
+    group.dataset.previewTooltip = anchor.dataset.previewTooltip;
+  }
+
+  if (group.dataset.hoverPreviewBound !== "true") {
+    group.dataset.hoverPreviewBound = "true";
+    group.addEventListener("mouseenter", () => {
+      void showLocalLinkHover(group, tools);
+    });
+    group.addEventListener("focusin", () => {
+      void showLocalLinkHover(group, tools);
+    });
+    group.addEventListener("mouseleave", () => {
+      if (localLinkHoverActiveGroup === group) {
+        hideLocalLinkHover();
+      }
+    });
+    group.addEventListener("focusout", (event) => {
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && group.contains(nextTarget)) {
+        return;
+      }
+
+      if (localLinkHoverActiveGroup === group) {
+        hideLocalLinkHover();
+      }
+    });
+  }
+}
+
+function ensureLocalLinkHoverCard() {
+  if (!localLinkHoverCard) {
+    localLinkHoverCard = document.createElement("div");
+    localLinkHoverCard.className = "preview-link-hover-card";
+    localLinkHoverCard.setAttribute("aria-hidden", "true");
+    document.body.append(localLinkHoverCard);
+  }
+
+  if (!localLinkHoverListenersBound) {
+    localLinkHoverListenersBound = true;
+    window.addEventListener(
+      "scroll",
+      () => {
+        hideLocalLinkHover();
+      },
+      { passive: true },
+    );
+    window.addEventListener(
+      "resize",
+      () => {
+        hideLocalLinkHover();
+      },
+      { passive: true },
+    );
+  }
+
+  return localLinkHoverCard;
+}
+
+async function showLocalLinkHover(group, tools) {
+  const href = group.dataset.localHref;
+  if (!href) {
     return;
   }
 
-  const action = document.createElement("button");
-  action.type = "button";
-  action.className = "preview-link-action icon-button icon-open-link";
-  action.title = "Open link in editor";
-  action.setAttribute("aria-label", "Open link in editor");
-  action.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    tools.vscode.postMessage({ type: "openLocalLinkInEditor", href });
-  });
-  group.append(action);
+  const card = ensureLocalLinkHoverCard();
+  const requestToken = ++localLinkHoverRequestToken;
+
+  if (
+    localLinkHoverActiveGroup &&
+    localLinkHoverActiveGroup !== group &&
+    localLinkHoverActiveGroup instanceof HTMLElement
+  ) {
+    localLinkHoverActiveGroup.classList.remove("is-hover-preview-active");
+  }
+
+  localLinkHoverActiveGroup = group;
+  group.classList.add("is-hover-preview-active");
+  renderLocalLinkHoverLoading(card, href);
+  positionLocalLinkHoverCard(card, group);
+
+  const preview = await tools.requestPreviewLinkHover(href);
+  if (
+    requestToken !== localLinkHoverRequestToken ||
+    localLinkHoverActiveGroup !== group
+  ) {
+    return;
+  }
+
+  if (!preview) {
+    hideLocalLinkHover();
+    return;
+  }
+
+  renderLocalLinkHoverPreview(card, preview);
+  positionLocalLinkHoverCard(card, group);
+}
+
+function hideLocalLinkHover() {
+  localLinkHoverRequestToken += 1;
+
+  if (localLinkHoverActiveGroup instanceof HTMLElement) {
+    localLinkHoverActiveGroup.classList.remove("is-hover-preview-active");
+  }
+
+  localLinkHoverActiveGroup = undefined;
+
+  if (!localLinkHoverCard) {
+    return;
+  }
+
+  localLinkHoverCard.classList.remove("is-visible");
+  localLinkHoverCard.setAttribute("aria-hidden", "true");
+  localLinkHoverCard.style.left = "-9999px";
+  localLinkHoverCard.style.top = "-9999px";
+}
+
+function renderLocalLinkHoverLoading(card, href) {
+  const fragment = document.createDocumentFragment();
+
+  fragment.append(
+    createHoverTextElement("h3", "preview-link-hover-title", href),
+    createHoverTextElement(
+      "p",
+      "preview-link-hover-message is-loading",
+      "Loading preview...",
+    ),
+  );
+
+  card.replaceChildren(fragment);
+  card.classList.add("is-visible");
+  card.setAttribute("aria-hidden", "false");
+}
+
+function renderLocalLinkHoverPreview(card, preview) {
+  const fragment = document.createDocumentFragment();
+  const headerText = preview.location
+    ? `${preview.displayPath} - ${preview.location}`
+    : preview.displayPath;
+
+  fragment.append(
+    createHoverTextElement("h3", "preview-link-hover-title", headerText),
+  );
+
+  if (preview.note) {
+    fragment.append(
+      createHoverTextElement("p", "preview-link-hover-note", preview.note),
+    );
+  }
+
+  if (preview.code) {
+    const pre = document.createElement("pre");
+    pre.className = "preview-link-hover-code modal-code-pre";
+
+    const code = document.createElement("code");
+    if (preview.language) {
+      code.className = `language-${preview.language}`;
+    }
+    code.textContent = preview.code;
+
+    if (preview.language && hljs.getLanguage(preview.language)) {
+      hljs.highlightElement(code);
+    } else {
+      code.classList.add("hljs");
+    }
+
+    pre.append(code);
+    fragment.append(pre);
+  } else if (preview.message) {
+    fragment.append(
+      createHoverTextElement(
+        "p",
+        "preview-link-hover-message",
+        preview.message,
+      ),
+    );
+  }
+
+  if (Array.isArray(preview.entries) && preview.entries.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "preview-link-hover-list";
+
+    for (const entry of preview.entries) {
+      const item = document.createElement("li");
+      item.textContent = entry.label;
+      list.append(item);
+    }
+
+    fragment.append(list);
+  }
+
+  if (preview.footer) {
+    fragment.append(
+      createHoverTextElement("p", "preview-link-hover-footer", preview.footer),
+    );
+  }
+
+  card.replaceChildren(fragment);
+  card.classList.add("is-visible");
+  card.setAttribute("aria-hidden", "false");
+}
+
+function createHoverTextElement(tagName, className, text) {
+  const element = document.createElement(tagName);
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function positionLocalLinkHoverCard(card, group) {
+  const linkRect = group.getBoundingClientRect();
+  const viewportPadding = 12;
+  const maxWidth = Math.min(540, window.innerWidth - viewportPadding * 2);
+
+  card.style.maxWidth = `${maxWidth}px`;
+  card.style.left = "0px";
+  card.style.top = "0px";
+
+  const cardRect = card.getBoundingClientRect();
+  let left = linkRect.left;
+  let top = linkRect.bottom + 10;
+
+  if (left + cardRect.width > window.innerWidth - viewportPadding) {
+    left = window.innerWidth - cardRect.width - viewportPadding;
+  }
+
+  if (top + cardRect.height > window.innerHeight - viewportPadding) {
+    top = linkRect.top - cardRect.height - 10;
+  }
+
+  card.style.left = `${Math.max(viewportPadding, Math.round(left))}px`;
+  card.style.top = `${Math.max(viewportPadding, Math.round(top))}px`;
 }
 
 function extractTableModel(table) {

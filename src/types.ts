@@ -33,6 +33,24 @@ export interface FileLocationTarget {
   column?: number;
 }
 
+export interface LocalLinkHoverEntry {
+  label: string;
+  path: string;
+  kind: "file" | "directory";
+}
+
+export interface LocalLinkHoverPreview {
+  kind: "file" | "directory";
+  displayPath: string;
+  location?: string;
+  note?: string;
+  language?: string;
+  code?: string;
+  entries?: LocalLinkHoverEntry[];
+  message?: string;
+  footer?: string;
+}
+
 export interface CodeBlockMatch {
   language: string | undefined;
   content: string;

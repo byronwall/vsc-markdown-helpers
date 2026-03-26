@@ -28,6 +28,9 @@ let elements;
 let isInitialized = false;
 const pendingPreviewLinkResolutions = new Map();
 let nextPreviewLinkResolutionRequestId = 1;
+const pendingPreviewLinkHoverResolutions = new Map();
+const previewLinkHoverCache = new Map();
+let nextPreviewLinkHoverRequestId = 1;
 
 initialize();
 
@@ -150,6 +153,17 @@ function initialize() {
         resolve(Array.isArray(message.results) ? message.results : []);
         break;
       }
+      case "previewLinkHoverResolved": {
+        const resolve = pendingPreviewLinkHoverResolutions.get(
+          message.requestId,
+        );
+        if (!resolve) {
+          break;
+        }
+        pendingPreviewLinkHoverResolutions.delete(message.requestId);
+        resolve(message.result);
+        break;
+      }
       default:
         break;
     }
@@ -238,6 +252,7 @@ function renderFiles() {
 
 function renderPreview(path, html) {
   const renderToken = ++state.previewRenderToken;
+  previewLinkHoverCache.clear();
   elements.previewTitle.textContent = basename(path);
   elements.previewPath.textContent = path;
   document.title = `${basename(path)} • Markdown Helpers`;
@@ -261,6 +276,8 @@ function renderPreview(path, html) {
     showModal,
     requestResolvedLocalLinks: (hrefs) =>
       requestResolvedLocalLinks(hrefs, renderToken),
+    requestPreviewLinkHover: (href) =>
+      requestPreviewLinkHover(href, renderToken),
   }).then(() => {
     if (renderToken === state.previewRenderToken) {
       syncActiveHeading();
@@ -290,6 +307,41 @@ function requestResolvedLocalLinks(hrefs, renderToken) {
       type: "resolvePreviewLinks",
       requestId,
       hrefs,
+    });
+  });
+}
+
+function requestPreviewLinkHover(href, renderToken) {
+  if (typeof href !== "string" || href.length === 0) {
+    return Promise.resolve(undefined);
+  }
+
+  if (renderToken !== state.previewRenderToken) {
+    return Promise.resolve(undefined);
+  }
+
+  if (previewLinkHoverCache.has(href)) {
+    return Promise.resolve(previewLinkHoverCache.get(href));
+  }
+
+  return new Promise((resolve) => {
+    const requestId = String(nextPreviewLinkHoverRequestId++);
+    pendingPreviewLinkHoverResolutions.set(requestId, (result) => {
+      if (renderToken !== state.previewRenderToken) {
+        resolve(undefined);
+        return;
+      }
+
+      if (result) {
+        previewLinkHoverCache.set(href, result);
+      }
+
+      resolve(result);
+    });
+    vscode.postMessage({
+      type: "resolvePreviewLinkHover",
+      requestId,
+      href,
     });
   });
 }
