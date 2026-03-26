@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="{{CSP}}" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="{{STYLE_URI}}" />
+    <title>Markdown Helpers</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="panel panel-files">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Workspace</p>
+            <h1>Markdown Files</h1>
+          </div>
+          <button id="refreshButton" class="ghost-button" type="button">Refresh</button>
+        </div>
+        <div id="filesEmptyState" class="empty-state hidden">
+          No markdown files found.
+        </div>
+        <div id="filesList" class="files-list" role="list"></div>
+      </aside>
+
+      <main class="panel panel-preview">
+        <header class="preview-header">
+          <div>
+            <p class="eyebrow">Preview</p>
+            <h2 id="previewTitle">Select a markdown file</h2>
+          </div>
+          <div class="preview-actions">
+            <button id="openTextButton" class="ghost-button" type="button">
+              Open Text
+            </button>
+          </div>
+        </header>
+        <div id="errorBanner" class="error-banner hidden"></div>
+        <article id="previewContent" class="preview-content empty-preview">
+          <div class="welcome-card">
+            <p class="eyebrow">Rendered HTML</p>
+            <h3>Markdown preview lives here</h3>
+            <p>
+              Pick a markdown file from the left to render it as HTML with a bounded reading width.
+            </p>
+          </div>
+        </article>
+      </main>
+
+      <aside class="panel panel-outline">
+        <div class="panel-header compact">
+          <div>
+            <p class="eyebrow">Outline</p>
+            <h2>Sections</h2>
+          </div>
+        </div>
+        <div id="tocEmptyState" class="empty-state">No headings yet.</div>
+        <nav id="tocList" class="toc-list"></nav>
+      </aside>
+    </div>
+
+    <script type="module" src="{{SCRIPT_URI}}"></script>
+  </body>
+</html>

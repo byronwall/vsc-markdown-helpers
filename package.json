@@ -1,0 +1,170 @@
+{
+    "name": "vsc-md-helpers",
+    "displayName": "Markdown Helpers",
+    "description": "Workspace markdown preview plus code-view helpers for file links, code blocks, and bounded wrapping",
+    "version": "0.0.1",
+    "publisher": "byronwall",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/byronwall/vsc-md-helpers.git"
+    },
+    "homepage": "https://github.com/byronwall/vsc-md-helpers",
+    "bugs": {
+        "url": "https://github.com/byronwall/vsc-md-helpers/issues"
+    },
+    "engines": {
+        "vscode": "^1.95.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onStartupFinished",
+        "onLanguage:markdown"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "markdownHelpers.refresh",
+                "title": "Markdown Helpers: Refresh"
+            },
+            {
+                "command": "markdownHelpers.showOutput",
+                "title": "Markdown Helpers: Show Output"
+            },
+            {
+                "command": "markdownHelpers.openMarkdown",
+                "title": "Markdown Helpers: Open Markdown Preview"
+            },
+            {
+                "command": "markdownHelpers.openMarkdownFile",
+                "title": "Markdown Helpers: Open Markdown File",
+                "icon": "$(go-to-file)"
+            },
+            {
+                "command": "markdownHelpers.copyMarkdownPath",
+                "title": "Markdown Helpers: Copy Markdown Full Path",
+                "icon": "$(copy)"
+            },
+            {
+                "command": "markdownHelpers.revealPreview",
+                "title": "Markdown Helpers: Reveal Preview"
+            },
+            {
+                "command": "markdownHelpers.openLocation",
+                "title": "Markdown Helpers: Open Linked File Location"
+            },
+            {
+                "command": "markdownHelpers.openCodeBlock",
+                "title": "Markdown Helpers: Open Code Block"
+            },
+            {
+                "command": "markdownHelpers.openCodeBlockAtCursor",
+                "title": "Markdown Helpers: Open Code Block At Cursor"
+            }
+        ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "markdownHelpers",
+                    "title": "Markdown",
+                    "icon": "$(markdown)"
+                }
+            ]
+        },
+        "views": {
+            "markdownHelpers": [
+                {
+                    "id": "markdownHelpers.recentMarkdown",
+                    "name": "Recent Markdown"
+                }
+            ]
+        },
+        "menus": {
+            "view/title": [
+                {
+                    "command": "markdownHelpers.refresh",
+                    "when": "view == markdownHelpers.recentMarkdown",
+                    "group": "navigation"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "markdownHelpers.openMarkdownFile",
+                    "when": "view == markdownHelpers.recentMarkdown && viewItem == markdownFile",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "markdownHelpers.copyMarkdownPath",
+                    "when": "view == markdownHelpers.recentMarkdown && viewItem == markdownFile",
+                    "group": "inline@2"
+                }
+            ],
+            "editor/title": [
+                {
+                    "command": "markdownHelpers.openCodeBlockAtCursor",
+                    "when": "resourceLangId == markdown",
+                    "group": "navigation@20"
+                },
+                {
+                    "command": "markdownHelpers.openMarkdown",
+                    "when": "resourceLangId == markdown",
+                    "group": "navigation@21"
+                }
+            ]
+        },
+        "configuration": {
+            "title": "Markdown Helpers",
+            "properties": {
+                "markdownHelpers.maxRecent": {
+                    "type": "number",
+                    "default": 60,
+                    "minimum": 5,
+                    "maximum": 500,
+                    "description": "Maximum number of markdown files shown in the Recent Markdown tree."
+                },
+                "markdownHelpers.extensions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [
+                        ".md",
+                        ".markdown",
+                        ".mdx"
+                    ],
+                    "description": "File extensions treated as markdown files for discovery."
+                },
+                "markdownHelpers.previewMaxWidth": {
+                    "type": "number",
+                    "default": 96,
+                    "minimum": 48,
+                    "maximum": 180,
+                    "description": "Maximum rendered markdown content width, in characters, inside the preview panel."
+                }
+            }
+        },
+        "configurationDefaults": {
+            "[markdown]": {
+                "editor.wordWrap": "bounded",
+                "editor.wordWrapColumn": 96
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "pnpm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "package:vsix": "pnpm run compile && vsce package --no-dependencies -o vsc-md-helpers.vsix",
+        "install:vsix": "code --install-extension vsc-md-helpers.vsix --force",
+        "build:install": "pnpm run package:vsix && pnpm run install:vsix",
+        "dev:host": "code --extensionDevelopmentPath=$PWD $PWD"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.1",
+        "@types/vscode": "^1.95.0",
+        "@vscode/vsce": "^3.7.1",
+        "typescript": "^5.7.2"
+    }
+}
