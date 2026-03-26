@@ -2,11 +2,17 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  overflow-x: hidden;
   background:
     radial-gradient(
+      circle at top right,
+      rgba(31, 92, 84, 0.08),
+      transparent 28%
+    ),
+    radial-gradient(
       circle at top left,
-      rgba(178, 119, 46, 0.14),
-      transparent 32%
+      rgba(164, 108, 47, 0.16),
+      transparent 34%
     ),
     linear-gradient(180deg, var(--bg), var(--bg-strong));
   color: var(--ink);
@@ -14,6 +20,7 @@ body {
 
 body {
   font-family: var(--font-ui);
+  text-rendering: optimizeLegibility;
 }
 
 body.has-modal {
@@ -58,25 +65,22 @@ body.has-modal {
 
 .app-shell {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(12rem, var(--outline-width));
-  gap: 1rem;
-  height: calc(100vh - 2rem);
-  min-height: 100vh;
-  padding: 1rem;
+  display: block;
+  min-height: calc(100vh - 2.5rem);
+  padding: 1.25rem calc(var(--outline-width) + 2.5rem) 1.25rem 1.25rem;
   box-sizing: border-box;
 }
 
 .workspace-picker {
   position: fixed;
-  top: 1rem;
-  left: 1rem;
+  top: 1.25rem;
+  left: 1.25rem;
   z-index: 20;
 }
 
 .panel {
   min-height: 0;
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(24px);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -95,6 +99,7 @@ body.has-modal {
   max-height: min(72vh, calc(100vh - 5rem));
   margin-top: 0.75rem;
   overflow: hidden;
+  background: color-mix(in srgb, var(--surface-elevated) 86%, transparent);
   transform-origin: top left;
   transition:
     opacity 140ms ease,
@@ -110,16 +115,26 @@ body.has-modal {
 }
 
 .panel-outline {
-  position: sticky;
-  top: 1rem;
-  align-self: start;
-  max-height: calc(100vh - 2rem);
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  width: var(--outline-width);
+  height: auto;
+  max-height: calc(100vh - 2.5rem);
+  background: color-mix(in srgb, var(--surface-elevated) 84%, transparent);
+  overflow: hidden;
+  z-index: 5;
 }
 
 .panel-preview {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-elevated) 92%, white),
+    color-mix(in srgb, var(--surface) 96%, transparent)
+  );
 }
 
 .panel-header,
@@ -128,12 +143,17 @@ body.has-modal {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem 1rem 0.8rem;
+  padding: 1.1rem 1.15rem 0.95rem;
   border-bottom: 1px solid var(--line);
 }
 
 .preview-header {
-  padding-left: 4.25rem;
+  padding-left: 4.55rem;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0)
+  );
 }
 
 .panel-header.compact {
@@ -146,21 +166,21 @@ body.has-modal {
   padding: 0.75rem;
 }
 
-.preview-content {
-  flex: 1;
-  overflow: auto;
-  padding: 2rem 1.4rem 3rem;
+.toc-list {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
-.preview-content > * {
-  width: min(100%, var(--content-width), var(--content-width-cap));
-  margin-left: auto;
-  margin-right: auto;
+.preview-content {
+  min-width: 0;
+  overflow: visible;
+  padding: 2rem 1.4rem 3.6rem;
+  scroll-padding-top: 2rem;
 }
 
 @media (max-width: 1200px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    padding-right: 1.25rem;
   }
 
   .panel-outline {
@@ -188,7 +208,7 @@ body.has-modal {
   }
 
   .preview-content {
-    padding: 1.25rem 1rem 2rem;
+    padding: 1.1rem 0.8rem 2rem;
   }
 
   .modal-card,

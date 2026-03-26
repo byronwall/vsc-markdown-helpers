@@ -79,14 +79,6 @@ function initialize() {
     }
   });
 
-  elements.previewContent.addEventListener(
-    "scroll",
-    scheduleSyncActiveHeading,
-    {
-      passive: true,
-    },
-  );
-
   window.addEventListener("scroll", scheduleSyncActiveHeading, {
     passive: true,
   });
@@ -237,7 +229,7 @@ function renderPreview(path, html) {
   elements.previewPath.textContent = path;
   document.title = `${basename(path)} • Markdown Helpers`;
   elements.previewContent.classList.remove("empty-preview");
-  elements.previewContent.innerHTML = html;
+  elements.previewContent.innerHTML = `<div class="preview-document">${html}</div>`;
   state.headings = Array.from(
     elements.previewContent.querySelectorAll(
       "h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]",
@@ -293,14 +285,13 @@ function renderToc() {
     button.addEventListener("click", () => {
       const target = getHeadingElement(item.id);
       if (target) {
-        const scrollTarget = getScrollTargetForElement(target);
+        const scrollTarget = getDocumentScrollTopForElement(target);
         debugToc("tocClick", {
           id: item.id,
-          top: scrollTarget.top,
+          top: scrollTarget,
           currentScrollTop: getCurrentScrollTop(),
-          scrollContext: scrollTarget.context,
         });
-        scrollToHeadingTarget(scrollTarget);
+        window.scrollTo({ top: scrollTarget, behavior: "smooth" });
       }
       state.activeHeadingId = item.id;
       renderToc();
@@ -348,13 +339,13 @@ function syncActiveHeading() {
     return;
   }
 
-  const scrollContext = getScrollContext();
+  const scrollTop = getCurrentScrollTop();
   const activationOffset = 120;
   let activeId = state.headings[0].id;
 
   for (const heading of state.headings) {
-    const top = getHeadingTopInScrollContext(heading, scrollContext);
-    if (top <= scrollContext.top + activationOffset) {
+    const top = getHeadingTopInDocument(heading);
+    if (top <= scrollTop + activationOffset) {
       activeId = heading.id;
       continue;
     }
@@ -365,8 +356,7 @@ function syncActiveHeading() {
     debugToc("activeHeadingChanged", {
       previous: state.activeHeadingId,
       next: activeId,
-      scrollTop: scrollContext.top,
-      scrollContext: scrollContext.kind,
+      scrollTop,
     });
     state.activeHeadingId = activeId;
     renderToc();
@@ -499,10 +489,19 @@ function ensureActiveTocItemVisible() {
     return;
   }
 
-  activeItem.scrollIntoView({
-    block: "nearest",
-    inline: "nearest",
-  });
+  const listRect = elements.tocList.getBoundingClientRect();
+  const itemRect = activeItem.getBoundingClientRect();
+  const topDelta = itemRect.top - listRect.top;
+  const bottomDelta = itemRect.bottom - listRect.bottom;
+
+  if (topDelta < 0) {
+    elements.tocList.scrollTop += topDelta - 12;
+    return;
+  }
+
+  if (bottomDelta > 0) {
+    elements.tocList.scrollTop += bottomDelta + 12;
+  }
 }
 
 function getHeadingElement(id) {
@@ -513,48 +512,8 @@ function getHeadingElement(id) {
   return elements.previewContent.querySelector(`#${CSS.escape(id)}`);
 }
 
-function getPreviewScrollTopForElement(element) {
-  const previewRect = elements.previewContent.getBoundingClientRect();
-  const targetRect = element.getBoundingClientRect();
-  return Math.max(
-    elements.previewContent.scrollTop + targetRect.top - previewRect.top - 28,
-    0,
-  );
-}
-
 function scheduleSyncActiveHeading() {
   window.requestAnimationFrame(syncActiveHeading);
-}
-
-function getScrollContext() {
-  const scrollingElement =
-    document.scrollingElement || document.documentElement;
-  if (isScrollable(elements.previewContent)) {
-    return {
-      kind: "preview",
-      top: elements.previewContent.scrollTop,
-    };
-  }
-
-  return {
-    kind: "document",
-    top: scrollingElement.scrollTop,
-  };
-}
-
-function getScrollTargetForElement(element) {
-  const scrollContext = getScrollContext();
-  if (scrollContext.kind === "preview") {
-    return {
-      context: scrollContext.kind,
-      top: getPreviewScrollTopForElement(element),
-    };
-  }
-
-  return {
-    context: scrollContext.kind,
-    top: getDocumentScrollTopForElement(element),
-  };
 }
 
 function getDocumentScrollTopForElement(element) {
@@ -564,36 +523,16 @@ function getDocumentScrollTopForElement(element) {
   return Math.max(scrollingElement.scrollTop + targetRect.top - 28, 0);
 }
 
-function scrollToHeadingTarget(target) {
-  if (target.context === "preview") {
-    elements.previewContent.scrollTo({ top: target.top, behavior: "smooth" });
-    return;
-  }
-
-  window.scrollTo({ top: target.top, behavior: "smooth" });
-}
-
-function getHeadingTopInScrollContext(heading, scrollContext) {
-  if (scrollContext.kind === "preview") {
-    const previewRect = elements.previewContent.getBoundingClientRect();
-    return (
-      heading.getBoundingClientRect().top -
-      previewRect.top +
-      elements.previewContent.scrollTop
-    );
-  }
-
+function getHeadingTopInDocument(heading) {
   const scrollingElement =
     document.scrollingElement || document.documentElement;
   return heading.getBoundingClientRect().top + scrollingElement.scrollTop;
 }
 
 function getCurrentScrollTop() {
-  return getScrollContext().top;
-}
-
-function isScrollable(element) {
-  return element.scrollHeight > element.clientHeight + 1;
+  const scrollingElement =
+    document.scrollingElement || document.documentElement;
+  return scrollingElement.scrollTop;
 }
 
 function debugToc(event, details) {
