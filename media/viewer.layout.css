@@ -16,6 +16,46 @@ body {
   font-family: var(--font-ui);
 }
 
+body.has-modal {
+  overflow: hidden;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--scrollbar-thumb),
+    var(--scrollbar-thumb-strong)
+  );
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    var(--scrollbar-thumb-strong),
+    var(--accent)
+  );
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
 .app-shell {
   position: relative;
   display: grid;
@@ -148,5 +188,11 @@ body {
 
   .preview-content {
     padding: 1.25rem 1rem 2rem;
+  }
+
+  .modal-card,
+  .modal-shell.is-wide .modal-card {
+    width: calc(100vw - 1.2rem);
+    max-height: calc(100vh - 1.2rem);
   }
 }

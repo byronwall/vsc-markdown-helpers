@@ -41,6 +41,19 @@
               aria-label="Refresh"
             ></button>
           </div>
+          <div class="files-filter-wrap">
+            <label class="sr-only" for="filesFilterInput">
+              Filter markdown files by name or path
+            </label>
+            <input
+              id="filesFilterInput"
+              class="panel-filter-input"
+              type="search"
+              placeholder="Filter by name or path"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
           <div id="filesEmptyState" class="empty-state hidden">
             No markdown files found.
           </div>
@@ -87,6 +100,33 @@
         <div id="tocEmptyState" class="empty-state">No headings yet.</div>
         <nav id="tocList" class="toc-list"></nav>
       </aside>
+
+      <div id="modalShell" class="modal-shell hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal="true"></div>
+        <section
+          class="modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modalTitle"
+          aria-describedby="modalSubtitle"
+        >
+          <header class="modal-header">
+            <div>
+              <p class="eyebrow">Preview Detail</p>
+              <h2 id="modalTitle">Preview</h2>
+              <p id="modalSubtitle" class="modal-subtitle hidden"></p>
+            </div>
+            <button
+              id="modalCloseButton"
+              class="ghost-button icon-button icon-close"
+              type="button"
+              title="Close preview detail"
+              aria-label="Close preview detail"
+            ></button>
+          </header>
+          <div id="modalContent" class="modal-content"></div>
+        </section>
+      </div>
     </div>
 
     <script type="module" src="{{SCRIPT_URI}}"></script>

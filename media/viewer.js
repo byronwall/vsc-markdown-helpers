@@ -14,103 +14,184 @@ const state = {
   toc: [],
   activeHeadingId: undefined,
   headings: [],
+  filesFilterQuery: "",
   filesCollapsed: true,
+  modalCleanup: undefined,
+  modalFocusReturnTarget: undefined,
+  modalToken: 0,
 };
 
-const elements = {
-  errorBanner: document.getElementById("errorBanner"),
-  filesEmptyState: document.getElementById("filesEmptyState"),
-  filesList: document.getElementById("filesList"),
-  filesPanel: document.getElementById("filesPanel"),
-  openTextButton: document.getElementById("openTextButton"),
-  previewContent: document.getElementById("previewContent"),
-  previewPath: document.getElementById("previewPath"),
-  previewTitle: document.getElementById("previewTitle"),
-  refreshButton: document.getElementById("refreshButton"),
-  toggleFilesButton: document.getElementById("toggleFilesButton"),
-  tocEmptyState: document.getElementById("tocEmptyState"),
-  tocList: document.getElementById("tocList"),
-};
+let elements;
+let isInitialized = false;
 
-elements.refreshButton.addEventListener("click", () => {
-  vscode.postMessage({ type: "refresh" });
-});
+initialize();
 
-elements.openTextButton.addEventListener("click", () => {
-  if (!state.selectedPath) {
-    return;
-  }
-  vscode.postMessage({ type: "openTextFile", path: state.selectedPath });
-});
-
-elements.toggleFilesButton.addEventListener("click", () => {
-  setFilesPanelCollapsed(!state.filesCollapsed);
-});
-
-elements.previewContent.addEventListener("scroll", () => {
-  window.requestAnimationFrame(syncActiveHeading);
-});
-
-document.addEventListener("click", (event) => {
-  if (state.filesCollapsed) {
+function initialize() {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initialize, { once: true });
     return;
   }
 
-  if (!(event.target instanceof Node)) {
+  if (isInitialized) {
     return;
   }
 
-  if (
-    elements.filesPanel.contains(event.target) ||
-    elements.toggleFilesButton.contains(event.target)
-  ) {
+  elements = getRequiredElements();
+  if (!elements) {
     return;
   }
 
-  setFilesPanelCollapsed(true);
-});
+  isInitialized = true;
 
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !state.filesCollapsed) {
-    setFilesPanelCollapsed(true, { returnFocus: true });
+  elements.refreshButton.addEventListener("click", () => {
+    vscode.postMessage({ type: "refresh" });
+  });
+
+  elements.openTextButton.addEventListener("click", () => {
+    if (!state.selectedPath) {
+      return;
+    }
+    vscode.postMessage({ type: "openTextFile", path: state.selectedPath });
+  });
+
+  elements.toggleFilesButton.addEventListener("click", () => {
+    setFilesPanelCollapsed(!state.filesCollapsed);
+  });
+
+  elements.filesFilterInput.addEventListener("input", (event) => {
+    state.filesFilterQuery = event.target.value.trim().toLowerCase();
+    renderFiles();
+  });
+
+  elements.modalCloseButton.addEventListener("click", () => {
+    hideModal();
+  });
+
+  elements.modalShell.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target.dataset.closeModal === "true") {
+      hideModal();
+    }
+  });
+
+  elements.previewContent.addEventListener("scroll", () => {
+    window.requestAnimationFrame(syncActiveHeading);
+  });
+
+  window.addEventListener("resize", () => {
+    window.requestAnimationFrame(syncActiveHeading);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Node)) {
+      return;
+    }
+
+    if (
+      !state.filesCollapsed &&
+      !elements.filesPanel.contains(event.target) &&
+      !elements.toggleFilesButton.contains(event.target)
+    ) {
+      setFilesPanelCollapsed(true);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    if (!elements.modalShell.classList.contains("hidden")) {
+      hideModal();
+      return;
+    }
+
+    if (!state.filesCollapsed) {
+      setFilesPanelCollapsed(true, { returnFocus: true });
+    }
+  });
+
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    switch (message.type) {
+      case "files":
+        state.files = Array.isArray(message.files) ? message.files : [];
+        state.selectedPath = message.selectedPath;
+        renderFiles();
+        break;
+      case "fileContent":
+        state.selectedPath = message.path;
+        state.toc = Array.isArray(message.toc) ? message.toc : [];
+        document.documentElement.style.setProperty(
+          "--content-width",
+          `${message.maxWidthCh || 96}ch`,
+        );
+        renderPreview(message.path, message.html);
+        renderToc();
+        renderFiles();
+        clearError();
+        break;
+      case "fileError":
+        showError(message.message || "Unable to load markdown file.");
+        break;
+      default:
+        break;
+    }
+  });
+
+  vscode.postMessage({ type: "ready" });
+  applyFilesPanelState();
+}
+
+function getRequiredElements() {
+  const resolved = {
+    errorBanner: document.getElementById("errorBanner"),
+    filesEmptyState: document.getElementById("filesEmptyState"),
+    filesFilterInput: document.getElementById("filesFilterInput"),
+    filesList: document.getElementById("filesList"),
+    filesPanel: document.getElementById("filesPanel"),
+    modalCloseButton: document.getElementById("modalCloseButton"),
+    modalContent: document.getElementById("modalContent"),
+    modalShell: document.getElementById("modalShell"),
+    modalSubtitle: document.getElementById("modalSubtitle"),
+    modalTitle: document.getElementById("modalTitle"),
+    openTextButton: document.getElementById("openTextButton"),
+    previewContent: document.getElementById("previewContent"),
+    previewPath: document.getElementById("previewPath"),
+    previewTitle: document.getElementById("previewTitle"),
+    refreshButton: document.getElementById("refreshButton"),
+    toggleFilesButton: document.getElementById("toggleFilesButton"),
+    tocEmptyState: document.getElementById("tocEmptyState"),
+    tocList: document.getElementById("tocList"),
+  };
+
+  const missing = Object.entries(resolved)
+    .filter(([, element]) => !(element instanceof HTMLElement))
+    .map(([name]) => name);
+
+  if (missing.length > 0) {
+    console.error(
+      "Markdown Helpers webview failed to initialize. Missing DOM nodes:",
+      missing,
+    );
+    return undefined;
   }
-});
 
-window.addEventListener("message", (event) => {
-  const message = event.data;
-  switch (message.type) {
-    case "files":
-      state.files = Array.isArray(message.files) ? message.files : [];
-      state.selectedPath = message.selectedPath;
-      renderFiles();
-      break;
-    case "fileContent":
-      state.selectedPath = message.path;
-      state.toc = Array.isArray(message.toc) ? message.toc : [];
-      document.documentElement.style.setProperty(
-        "--content-width",
-        `${message.maxWidthCh || 96}ch`,
-      );
-      renderPreview(message.path, message.html);
-      renderToc();
-      renderFiles();
-      clearError();
-      break;
-    case "fileError":
-      showError(message.message || "Unable to load markdown file.");
-      break;
-    default:
-      break;
-  }
-});
-
-vscode.postMessage({ type: "ready" });
-applyFilesPanelState();
+  return resolved;
+}
 
 function renderFiles() {
   elements.filesList.innerHTML = "";
-  const files = state.files;
+  const files = getFilteredFiles();
+  const hasAnyFiles = state.files.length > 0;
   elements.filesEmptyState.classList.toggle("hidden", files.length > 0);
+  elements.filesEmptyState.textContent = hasAnyFiles
+    ? "No markdown files match the current filter."
+    : "No markdown files found.";
   applyFilesPanelState();
 
   for (const file of files) {
@@ -168,7 +249,11 @@ function renderPreview(path, html) {
       });
     });
 
-  void enhancePreview(elements.previewContent, vscode).then(() => {
+  void enhancePreview(elements.previewContent, {
+    vscode,
+    copyText,
+    showModal,
+  }).then(() => {
     syncActiveHeading();
   });
 }
@@ -189,12 +274,19 @@ function renderToc() {
     button.textContent = item.text;
     button.addEventListener("click", () => {
       const target = document.getElementById(item.id);
-      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (target) {
+        elements.previewContent.scrollTo({
+          top: Math.max(target.offsetTop - 28, 0),
+          behavior: "smooth",
+        });
+      }
       state.activeHeadingId = item.id;
       renderToc();
     });
     elements.tocList.append(button);
   }
+
+  ensureActiveTocItemVisible();
 }
 
 function applyFilesPanelState() {
@@ -215,7 +307,8 @@ function setFilesPanelCollapsed(collapsed, options = {}) {
   applyFilesPanelState();
 
   if (!collapsed) {
-    elements.filesPanel.focus();
+    elements.filesFilterInput.focus();
+    elements.filesFilterInput.select();
     return;
   }
 
@@ -233,12 +326,11 @@ function syncActiveHeading() {
     return;
   }
 
-  const containerTop = elements.previewContent.getBoundingClientRect().top;
+  const scrollTop = elements.previewContent.scrollTop + 120;
   let activeId = state.headings[0].id;
 
   for (const heading of state.headings) {
-    const distance = heading.getBoundingClientRect().top - containerTop;
-    if (distance <= 84) {
+    if (heading.offsetTop <= scrollTop) {
       activeId = heading.id;
       continue;
     }
@@ -259,4 +351,115 @@ function showError(message) {
 function clearError() {
   elements.errorBanner.textContent = "";
   elements.errorBanner.classList.add("hidden");
+}
+
+function getFilteredFiles() {
+  if (!state.filesFilterQuery) {
+    return state.files;
+  }
+
+  return state.files.filter((file) =>
+    file.relativePath.toLowerCase().includes(state.filesFilterQuery),
+  );
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.className = "sr-only-textarea";
+  document.body.append(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function showModal(options) {
+  const { content, onClose, subtitle, title, wide = false } = options;
+
+  cleanupModal();
+  const modalToken = ++state.modalToken;
+  state.modalCleanup = typeof onClose === "function" ? onClose : undefined;
+  state.modalFocusReturnTarget = document.activeElement;
+
+  elements.modalTitle.textContent = title || "Preview";
+  elements.modalSubtitle.textContent = subtitle || "";
+  elements.modalSubtitle.classList.toggle("hidden", !subtitle);
+  elements.modalContent.replaceChildren(content);
+  elements.modalShell.classList.remove("hidden");
+  elements.modalShell.setAttribute("aria-hidden", "false");
+  elements.modalShell.classList.toggle("is-wide", Boolean(wide));
+  document.body.classList.add("has-modal");
+  window.requestAnimationFrame(() => {
+    elements.modalCloseButton.focus();
+  });
+
+  return {
+    isActive() {
+      return modalToken === state.modalToken;
+    },
+    setOnClose(cleanup) {
+      if (modalToken !== state.modalToken) {
+        if (typeof cleanup === "function") {
+          cleanup();
+        }
+        return false;
+      }
+
+      cleanupModal();
+      state.modalCleanup = typeof cleanup === "function" ? cleanup : undefined;
+      return true;
+    },
+  };
+}
+
+function hideModal(options = {}) {
+  if (elements.modalShell.classList.contains("hidden")) {
+    return;
+  }
+
+  cleanupModal();
+  elements.modalShell.classList.add("hidden");
+  elements.modalShell.setAttribute("aria-hidden", "true");
+  elements.modalShell.classList.remove("is-wide");
+  elements.modalContent.replaceChildren();
+  elements.modalTitle.textContent = "Preview";
+  elements.modalSubtitle.textContent = "";
+  elements.modalSubtitle.classList.add("hidden");
+  document.body.classList.remove("has-modal");
+
+  if (options.restoreFocus === false) {
+    state.modalFocusReturnTarget = undefined;
+    return;
+  }
+
+  if (state.modalFocusReturnTarget instanceof HTMLElement) {
+    state.modalFocusReturnTarget.focus();
+  }
+  state.modalFocusReturnTarget = undefined;
+  state.modalToken += 1;
+}
+
+function cleanupModal() {
+  if (typeof state.modalCleanup === "function") {
+    state.modalCleanup();
+  }
+  state.modalCleanup = undefined;
+}
+
+function ensureActiveTocItemVisible() {
+  const activeItem = elements.tocList.querySelector(".toc-link.is-active");
+  if (!(activeItem instanceof HTMLElement)) {
+    return;
+  }
+
+  activeItem.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+  });
 }
