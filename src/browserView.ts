@@ -237,15 +237,25 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
     }
 
     const relativePath = await this.discovery.resolveRelativePath(target.uri);
-    if (relativePath) {
+    if (target.kind === "file" && relativePath) {
       await this.revealAndOpenByRelativePath(relativePath);
       if (typeof target.line === "number") {
-        await showDocument(target.uri, target.line, target.column);
+        await showDocument(
+          target.uri,
+          target.line,
+          target.endLine,
+          target.column,
+        );
       }
       return;
     }
 
-    await showDocument(target.uri, target.line, target.column);
+    if (target.kind === "directory") {
+      await vscode.commands.executeCommand("revealInExplorer", target.uri);
+      return;
+    }
+
+    await showDocument(target.uri, target.line, target.endLine, target.column);
   }
 
   private renderMarkdown(text: string): RenderedMarkdownDocument {
@@ -294,6 +304,7 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
 async function showDocument(
   uri: vscode.Uri,
   line?: number,
+  endLine?: number,
   column?: number,
 ): Promise<void> {
   const document = await vscode.workspace.openTextDocument(uri);
@@ -306,9 +317,17 @@ async function showDocument(
       Math.max(Math.floor(line) - 1, 0),
       document.lineCount - 1,
     );
+    const clampedEndLine = Math.min(
+      Math.max(Math.floor((endLine ?? line) - 1), clampedLine),
+      document.lineCount - 1,
+    );
     const clampedColumn = Math.max(Math.floor((column ?? 1) - 1), 0);
-    const position = new vscode.Position(clampedLine, clampedColumn);
-    const range = new vscode.Range(position, position);
+    const selectionStart = new vscode.Position(clampedLine, clampedColumn);
+    const selectionEnd = new vscode.Position(
+      clampedEndLine,
+      document.lineAt(clampedEndLine).range.end.character,
+    );
+    const range = new vscode.Range(selectionStart, selectionEnd);
     const editor = await vscode.window.showTextDocument(document, {
       preview: true,
       selection: range,

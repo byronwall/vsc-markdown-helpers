@@ -25,6 +25,8 @@ It also sets markdown editors to bounded wrapping at `96` columns by default thr
 - Turns path-like references such as `/repo/file.ts:57-75`, `./notes.md`, and `docs/spec.md#L10` into clickable editor links.
 - Supports workspace-root paths, document-relative paths, and absolute filesystem paths.
 - Opens the file and jumps to the best available line or column.
+- Adds hover previews for detected file links, including bounded whole-file previews and referenced line ranges.
+- Adds hover previews for folders with clickable child entries, and folder links reveal in the explorer.
 
 ### 3) Open fenced code blocks as unsaved files
 

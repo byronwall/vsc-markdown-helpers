@@ -1,25 +1,27 @@
 # VS Markdown Helpers
 
-Reference repo that has all my preferred stuff in it: `/Users/byronwall/repos/vsc-jsonl-viewer`
+## General or common
 
-Goals:
+- Detect additional files as `md` including `.prompt.md` and `.instructions.md` and any other of the AI/agent files that end in `.md`. Right now these files do not trigger the special features
 
-- Want to have a set of tools that help when viewing markdown as code and also rendering markdown as HTML
-- For code view:
-  - Render anything that could be a link to a file with an underline and a clickable thing that jumps to that line/spot in the file. See sample below. I want this to be fairly accomodating of relative vs. absolute links. Assume if something looks like a valid path in the repo, that it is.
-  - For code blocks, offer a helper that opens the code block as a dedicated unsaved file. I want to be able to quickly view code samples outside of the markdown file - I might choose to execute them or do something else
-  - I turn on line wrapping nearly alwyas but the text is subject to whatever the display widht is. It's oftne too wide. I really wnat to constrain the display width that so that text does not go beyond 96 char. This needs to work without modifying the content though. If it's possible, please implement
+## Improve code editor features
 
-## Code sample to render as clickable links (the code ticks)
+- Change the order of icons so that my markdown preview shows up before all other buttons - I want it to always be available instead of hiding in the `...` menu
 
-```sample
+## Improve markdown sidebar
 
-### 1. Executive Summary
+- Add an option to filter to markdown files associated with the current PR or branch against main -- basically a short list of "high relevant files"
 
-- P0 cross-model data bleed and subscription leaks in `/client/apps/modeler/src/api-new-model-loading.ts:57-75`, `/client/apps/modeler/src/api-new-model-loading.ts:139-143`, `/client/packages/api-client/src/generated/entity-manager.tsx:329-367`, and `/client/packages/api-client/src/core/relation.ts:224-249`: identity relation channels are subscribed manually, never registered in the new subscription registry, never unsubscribed on model switch, and never resubscribed on reconnect. What is wrong: old model relation channels can remain alive while the `Relation` instance is rebound to a new model channel. How to fix: route identity relation subscriptions through the same tracked subscription API as every other relation and await cleanup during model switches.
-- P1 data tables can go blank for raw-relation fallbacks in `/client/packages/api-client/src/entities/Source.ts:51-52`, `/client/packages/api-client/src/entities/Relationship.ts:181-182`, `/client/packages/api-client/src/entities/CanonicalTable.ts:42-43`, and `/client/packages/api-client/src/entities/Task.ts:53-54`: the new getters only return `DynamicRelation` entities, but several callers still legitimately fall back to raw relation IDs (`this.id` or `SQLTaskTargetRelation`). What is wrong: those IDs are not guaranteed to exist in `sys::DynamicRelationType`, so `dataRelation` becomes `undefined`. How to fix: resolve subscribed raw relations by ID, not only `DynamicRelation` entities, or add a helper that returns a relation-like wrapper for both cases.
-- P1 stale datasets may stop refreshing after producer status flips back to pending because the old refetch trigger was removed from `/client/apps/modeler/src/api-new-model-loading.ts` and nothing equivalent was added to `/client/packages/api-client/src/entities/DynamicRelation.ts:77-127`. What is wrong: relation channel subscription is the documented trigger for executing stale tasks, but the new path subscribes once and then only watches producer state for presentation. How to fix: restore a pending-edge re-subscribe/refetch path or move that behavior into `DynamicRelation.ensureSubscribed`.
-- P2 the unknown-channel error contract regressed between `main` `/client/apps/modeler/src/api-new-model-loading.ts:527-549` and the new `/client/packages/api-client/src/entities/DynamicRelation.ts:164-176`. What is wrong: the old helper translated missing relation channels into a specific “Missing relation channel” diagnosis; the new code flattens everything into `Relation load failed`. How to fix: preserve the special-case mapping so migration defects are distinguishable from transient transport failures.
-- P2 reconnect code now cannot detect dynamic relation resubscribe failures because `/client/packages/api-client/src/entities/DynamicRelation.ts:119-126` converts subscribe exceptions into state and resolves the promise, while `/client/packages/api-client/src/generated/entity-manager.tsx:352-367` awaits that promise as if success were meaningful. What is wrong: reconnect finishes green even when relation channels are still broken. How to fix: either rethrow after storing UI state or return an explicit result object so callers can branch on failure.
+## Improve markdown preview
 
-```
+- Collapse the file list as the screen gets small
+- TOC should render as a sticky thing on the right side - indicate the active header while scrolling
+  - TOC should include tree style lines connecting children to parents
+- Links to markdown files should render in teh fancy preview - links to code files and other stuff should "jump out" to VS Code again
+- It'd be nice if the title of the tab matched the file being viewed
+- Render the YAML front matter as a small table of the key value pairs -- allow it to be collapsed by default and expand to visible -- when collapsed, give a terse summary of the keys that are defined, limit to 1 line displayed
+- Tables do not render correctly, I see raw markdown text instead
+- Render mermaid diagrams when detected in a code block. Use all the features from this repo on that front: `/Users/byronwall/repos/git-visual-files`
+- do someting to get good syntax highlighting in the blocks - needs ot be language aware
+- Cap the recent file list to like 100 items -- show the initial path to the file in a compact single line text block below the file `time - heading - word` line
+- Prevent horizontal overflow with really long lines. Force them to break somewhere

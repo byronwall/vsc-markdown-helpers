@@ -3,6 +3,7 @@ import { MarkdownBrowserViewProvider } from "./browserView";
 import { MarkdownDiscoveryService } from "./discovery";
 import {
   MarkdownCodeBlockCodeLensProvider,
+  MarkdownPathHoverProvider,
   MarkdownPathLinkProvider,
   openCodeBlockAtLine,
   resolveWorkspacePath,
@@ -92,6 +93,10 @@ export async function activate(
       MARKDOWN_SELECTOR,
       new MarkdownPathLinkProvider(),
     ),
+    vscode.languages.registerHoverProvider(
+      MARKDOWN_SELECTOR,
+      new MarkdownPathHoverProvider(),
+    ),
     vscode.languages.registerCodeLensProvider(
       MARKDOWN_SELECTOR,
       codeLensProvider,
@@ -167,17 +172,28 @@ export async function activate(
     ),
     vscode.commands.registerCommand(
       "markdownHelpers.openLocation",
-      async (target?: { path?: string; line?: number; column?: number }) => {
+      async (target?: {
+        path?: string;
+        line?: number;
+        endLine?: number;
+        column?: number;
+      }) => {
         if (!target?.path) {
           return;
         }
         const resolved = await resolveWorkspacePath(
-          `${target.path}${formatLocationSuffix(target.line, target.column)}`,
+          `${target.path}${formatLocationSuffix(target.line, target.endLine, target.column)}`,
         );
         if (!resolved) {
           return;
         }
-        await showLocation(resolved.uri, resolved.line, resolved.column);
+        await showLocation(
+          resolved.uri,
+          resolved.kind,
+          resolved.line,
+          resolved.endLine,
+          resolved.column,
+        );
       },
     ),
     vscode.commands.registerCommand(
@@ -293,9 +309,16 @@ async function resolveUri(
 
 async function showLocation(
   uri: vscode.Uri,
+  kind: "file" | "directory",
   line?: number,
+  endLine?: number,
   column?: number,
 ): Promise<void> {
+  if (kind === "directory") {
+    await vscode.commands.executeCommand("revealInExplorer", uri);
+    return;
+  }
+
   const document = await vscode.workspace.openTextDocument(uri);
   if (
     typeof line === "number" &&
@@ -306,9 +329,17 @@ async function showLocation(
       Math.max(Math.floor(line) - 1, 0),
       document.lineCount - 1,
     );
+    const clampedEndLine = Math.min(
+      Math.max(Math.floor((endLine ?? line) - 1), clampedLine),
+      document.lineCount - 1,
+    );
     const clampedColumn = Math.max(Math.floor((column ?? 1) - 1), 0);
-    const position = new vscode.Position(clampedLine, clampedColumn);
-    const range = new vscode.Range(position, position);
+    const selectionStart = new vscode.Position(clampedLine, clampedColumn);
+    const selectionEnd = new vscode.Position(
+      clampedEndLine,
+      document.lineAt(clampedEndLine).range.end.character,
+    );
+    const range = new vscode.Range(selectionStart, selectionEnd);
     const editor = await vscode.window.showTextDocument(document, {
       preview: false,
       selection: range,
@@ -322,9 +353,16 @@ async function showLocation(
   await vscode.window.showTextDocument(document, { preview: false });
 }
 
-function formatLocationSuffix(line?: number, column?: number): string {
+function formatLocationSuffix(
+  line?: number,
+  endLine?: number,
+  column?: number,
+): string {
   if (typeof line !== "number") {
     return "";
+  }
+  if (typeof endLine === "number" && endLine > line) {
+    return `:${line}-${endLine}`;
   }
   if (typeof column !== "number") {
     return `:${line}`;

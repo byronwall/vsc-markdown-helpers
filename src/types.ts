@@ -27,7 +27,9 @@ export interface RenderedMarkdownDocument {
 
 export interface FileLocationTarget {
   uri: vscode.Uri;
+  kind: "file" | "directory";
   line?: number;
+  endLine?: number;
   column?: number;
 }
 
