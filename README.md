@@ -143,6 +143,21 @@ pnpm run watch
 pnpm run dev:host
 ```
 
+## Publishing
+
+```bash
+pnpm install
+pnpm run package:vsix
+```
+
+For Marketplace publishing:
+
+1. Create or verify the `byronwall` publisher in the Visual Studio Marketplace.
+2. Run `vsce login byronwall` with a PAT that has `Marketplace (Manage)` scope.
+3. Publish with either `pnpm run publish:patch`, `pnpm run publish:minor`, or upload the generated VSIX manually.
+
+The repository now includes the standard Marketplace presentation files: `README.md`, `CHANGELOG.md`, `SUPPORT.md`, and a packaged PNG icon.
+
 ## Extension layout
 
 - `src/extension.ts` - activation, command wiring, provider registration
@@ -154,10 +169,4 @@ pnpm run dev:host
 
 ## Release Notes
 
-### 0.0.1
-
-- Initial release
-- Recent markdown discovery with live preview
-- Clickable path references in markdown source
-- Fenced code block extraction into untitled editors
-- Markdown wrap defaults bounded to 96 columns
+See `CHANGELOG.md` for versioned release notes.

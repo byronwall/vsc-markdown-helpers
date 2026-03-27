@@ -4,5 +4,9 @@ src/**
 .gitignore
 tsconfig.json
 pnpm-lock.yaml
+AGENTS.md
+TODO.md
+scripts/**
+*.vsix
 **/*.map
 **/*.ts

@@ -4,3 +4,4 @@ out/
 *.vsix
 media/viewer.bundle.js
 media/viewer.bundle.css
+.DS_Store

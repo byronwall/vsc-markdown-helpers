@@ -4,6 +4,7 @@
     "description": "Workspace markdown preview plus code-view helpers for file links, code blocks, and bounded wrapping",
     "version": "0.0.1",
     "publisher": "byronwall",
+    "license": "SEE LICENSE IN LICENSE",
     "repository": {
         "type": "git",
         "url": "https://github.com/byronwall/vsc-md-helpers.git"
@@ -12,6 +13,21 @@
     "bugs": {
         "url": "https://github.com/byronwall/vsc-md-helpers/issues"
     },
+    "icon": "assets/icon.png",
+    "galleryBanner": {
+        "color": "#18333A",
+        "theme": "dark"
+    },
+    "keywords": [
+        "markdown",
+        "preview",
+        "links",
+        "code-blocks",
+        "mermaid",
+        "documentation",
+        "workspace"
+    ],
+    "pricing": "Free",
     "engines": {
         "vscode": "^1.95.0"
     },
@@ -27,57 +43,68 @@
         "commands": [
             {
                 "command": "markdownHelpers.refresh",
-                "title": "$(refresh)",
+                "category": "Markdown Helpers",
+                "title": "Refresh Recent Markdown",
                 "icon": "$(refresh)"
             },
             {
                 "command": "markdownHelpers.showOutput",
-                "title": "$(output)",
+                "category": "Markdown Helpers",
+                "title": "Show Output",
                 "icon": "$(output)"
             },
             {
                 "command": "markdownHelpers.enableRecentFilesPrFilter",
-                "title": "$(filter)",
+                "category": "Markdown Helpers",
+                "title": "Show Changed Markdown",
                 "icon": "$(filter)"
             },
             {
                 "command": "markdownHelpers.disableRecentFilesPrFilter",
-                "title": "$(list-unordered)",
+                "category": "Markdown Helpers",
+                "title": "Show All Markdown",
                 "icon": "$(list-unordered)"
             },
             {
                 "command": "markdownHelpers.openMarkdown",
-                "title": "$(preview)",
+                "category": "Markdown Helpers",
+                "title": "Open Preview",
                 "icon": "$(preview)"
             },
             {
                 "command": "markdownHelpers.openMarkdownFile",
-                "title": "$(go-to-file)",
+                "category": "Markdown Helpers",
+                "title": "Open Markdown File",
                 "icon": "$(go-to-file)"
             },
             {
                 "command": "markdownHelpers.copyMarkdownPath",
-                "title": "$(copy)",
+                "category": "Markdown Helpers",
+                "title": "Copy Markdown Full Path",
                 "icon": "$(copy)"
             },
             {
                 "command": "markdownHelpers.revealPreview",
-                "title": "$(preview)",
+                "category": "Markdown Helpers",
+                "title": "Reveal Preview",
                 "icon": "$(preview)"
             },
             {
                 "command": "markdownHelpers.openLocation",
-                "title": "$(go-to-file)",
+                "category": "Markdown Helpers",
+                "title": "Open Link Target",
                 "icon": "$(go-to-file)"
             },
             {
                 "command": "markdownHelpers.openCodeBlock",
-                "title": "$(code)",
+                "category": "Markdown Helpers",
+                "title": "Open Code Block",
                 "icon": "$(code)"
             },
             {
                 "command": "markdownHelpers.openCodeBlockAtCursor",
-                "title": "$(code)",
+                "category": "Markdown Helpers",
+                "title": "Open Code Block At Cursor",
                 "icon": "$(code)"
             }
         ],
@@ -196,6 +223,9 @@
         "compile": "pnpm run typecheck && pnpm run bundle:extension && pnpm run bundle:webview",
         "watch": "tsc -watch -p ./",
         "package:vsix": "pnpm run compile && vsce package --no-dependencies -o vsc-md-helpers.vsix",
+        "publish:vsix": "vsce publish --packagePath vsc-md-helpers.vsix",
+        "publish:patch": "pnpm run compile && vsce publish patch --no-dependencies",
+        "publish:minor": "pnpm run compile && vsce publish minor --no-dependencies",
         "install:vsix": "code --install-extension vsc-md-helpers.vsix --force",
         "build:install": "pnpm run package:vsix && pnpm run install:vsix",
         "dev:host": "code --extensionDevelopmentPath=$PWD $PWD"
