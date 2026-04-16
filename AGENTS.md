@@ -27,13 +27,13 @@
 
 ## Webview editing conventions
 
-- `media/viewer.css` is only an import hub.
-- Put tokens in `media/viewer.tokens.css`, layout in `media/viewer.layout.css`, and UI pieces in `media/viewer.components.css`.
-- Do not hand-edit generated webview bundles like `media/viewer.bundle.css` or `media/viewer.bundle.js`; update source files and regenerate them with the project build command.
+- `media/src/viewer.css` is only an import hub.
+- Put tokens in `media/src/viewer.tokens.css`, layout in `media/src/viewer.layout.css`, and UI pieces in `media/src/viewer.components.css`.
+- Do not hand-edit generated webview bundles like `media/dist/viewer.bundle.css` or `media/dist/viewer.bundle.js`; update source files and regenerate them with the project build command.
 - Preserve the webview template placeholders `{{CSP}}`, `{{STYLE_URI}}`, and `{{SCRIPT_URI}}`.
 
 ## Integration points to keep stable
 
 - Commands and IDs are defined in `package.json` and implemented in `src/extension.ts`; keep them aligned.
-- Webview message `type` values are the contract between `src/browserView.ts` and `media/viewer.js`.
+- Webview message `type` values are the contract between `src/browserView.ts` and `media/src/viewer.js`.
 - Fenced code block parsing is shared behavior for code lenses, editor commands, and preview actions; keep it consistent.

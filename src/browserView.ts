@@ -430,10 +430,20 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
     }
 
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, "media", "viewer.bundle.css"),
+      vscode.Uri.joinPath(
+        this.extensionUri,
+        "media",
+        "dist",
+        "viewer.bundle.css",
+      ),
     );
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, "media", "viewer.bundle.js"),
+      vscode.Uri.joinPath(
+        this.extensionUri,
+        "media",
+        "dist",
+        "viewer.bundle.js",
+      ),
     );
 
     const csp = [

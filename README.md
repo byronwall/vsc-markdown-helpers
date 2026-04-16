@@ -165,7 +165,9 @@ The repository now includes the standard Marketplace presentation files: `README
 - `src/tree.ts` - Recent Markdown activity bar tree
 - `src/browserView.ts` - preview panel host and markdown rendering
 - `src/editorTools.ts` - document links and fenced code block helpers
-- `media/viewer.html` / `media/viewer.js` / `media/viewer.css` - preview UI
+- `media/viewer.html` - preview HTML template
+- `media/src/` - preview source JS and CSS
+- `media/dist/` - generated preview bundles
 
 ## Release Notes
 
