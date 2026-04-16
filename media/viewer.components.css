@@ -705,6 +705,11 @@ samp {
   box-shadow: 0 12px 24px rgba(60, 46, 28, 0.12);
 }
 
+.code-block-expand-button:hover,
+.code-block-expand-button:focus-visible {
+  transform: translate(-50%, 50%);
+}
+
 .preview-link-group {
   display: inline;
   vertical-align: baseline;

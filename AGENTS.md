@@ -29,6 +29,7 @@
 
 - `media/viewer.css` is only an import hub.
 - Put tokens in `media/viewer.tokens.css`, layout in `media/viewer.layout.css`, and UI pieces in `media/viewer.components.css`.
+- Do not hand-edit generated webview bundles like `media/viewer.bundle.css` or `media/viewer.bundle.js`; update source files and regenerate them with the project build command.
 - Preserve the webview template placeholders `{{CSP}}`, `{{STYLE_URI}}`, and `{{SCRIPT_URI}}`.
 
 ## Integration points to keep stable
