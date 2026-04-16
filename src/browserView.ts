@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { MarkdownDiscoveryService } from "./discovery";
@@ -88,13 +89,13 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "media")],
+        localResourceRoots: getWebviewResourceRoots(this.extensionUri),
       },
     );
 
     panel.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "media")],
+      localResourceRoots: getWebviewResourceRoots(this.extensionUri),
     };
     panel.webview.html = await this.getHtml(panel.webview);
 
@@ -155,7 +156,11 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
 
     try {
       const text = await fs.readFile(entry.uri.fsPath, "utf8");
-      const rendered = this.renderMarkdown(text);
+      const rendered = await this.renderMarkdown(
+        text,
+        entry.uri,
+        this.panel.webview,
+      );
       await this.panel.webview.postMessage({
         type: "fileContent",
         path: entry.relativePath,
@@ -374,8 +379,44 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
     });
   }
 
-  private renderMarkdown(text: string): RenderedMarkdownDocument {
-    return renderMarkdownDocument(text);
+  private async renderMarkdown(
+    text: string,
+    baseUri: vscode.Uri,
+    webview: vscode.Webview,
+  ): Promise<RenderedMarkdownDocument> {
+    return renderMarkdownDocument(text, {
+      baseUri,
+      resolveImageSource: (src, imageBaseUri) =>
+        this.resolvePreviewImageSource(src, imageBaseUri, webview),
+    });
+  }
+
+  private async resolvePreviewImageSource(
+    src: string,
+    baseUri: vscode.Uri,
+    webview: vscode.Webview,
+  ): Promise<string | undefined> {
+    const normalized = src.trim();
+    if (!normalized || isWebSafeImageSource(normalized)) {
+      return undefined;
+    }
+
+    const imageUris = resolvePreviewImageUris(normalized, baseUri);
+    for (const imageUri of imageUris) {
+      try {
+        await fs.access(imageUri.fsPath);
+      } catch {
+        continue;
+      }
+
+      if (vscode.workspace.getWorkspaceFolder(imageUri)) {
+        return webview.asWebviewUri(imageUri).toString();
+      }
+
+      return encodeImageFileAsDataUri(imageUri);
+    }
+
+    return undefined;
   }
 
   private async getHtml(webview: vscode.Webview): Promise<string> {
@@ -414,6 +455,126 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
+  }
+}
+
+function getWebviewResourceRoots(extensionUri: vscode.Uri): vscode.Uri[] {
+  const workspaceRoots =
+    vscode.workspace.workspaceFolders?.map((folder) => folder.uri) ?? [];
+  return [vscode.Uri.joinPath(extensionUri, "media"), ...workspaceRoots];
+}
+
+function isWebSafeImageSource(src: string): boolean {
+  return /^(https?:|data:|vscode-webview-resource:)/i.test(src);
+}
+
+function resolvePreviewImageUris(
+  src: string,
+  baseUri: vscode.Uri,
+): vscode.Uri[] {
+  const fileUriPrefix = /^file:\/\//i;
+  if (fileUriPrefix.test(src)) {
+    try {
+      const uri = vscode.Uri.parse(src, true);
+      return uri.scheme === "file" ? [uri] : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const rawPath = normalizePreviewImagePath(src);
+  if (!rawPath) {
+    return [];
+  }
+
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+  const candidates = new Map<string, vscode.Uri>();
+
+  if (path.isAbsolute(rawPath)) {
+    const absoluteUri = vscode.Uri.file(rawPath);
+    candidates.set(absoluteUri.fsPath, absoluteUri);
+
+    const workspaceRelativePath = rawPath.replace(/^\/+/, "");
+    if (workspaceRelativePath.length > 0) {
+      for (const folder of workspaceFolders) {
+        const rootedUri = vscode.Uri.file(
+          path.join(folder.uri.fsPath, workspaceRelativePath),
+        );
+        candidates.set(rootedUri.fsPath, rootedUri);
+      }
+    }
+
+    return [...candidates.values()];
+  }
+
+  if (baseUri.scheme === "file") {
+    const relativeUri = vscode.Uri.file(
+      path.resolve(path.dirname(baseUri.fsPath), rawPath),
+    );
+    candidates.set(relativeUri.fsPath, relativeUri);
+  }
+
+  for (const folder of workspaceFolders) {
+    const rootedUri = vscode.Uri.file(path.join(folder.uri.fsPath, rawPath));
+    candidates.set(rootedUri.fsPath, rootedUri);
+  }
+
+  return [...candidates.values()];
+}
+
+function normalizePreviewImagePath(src: string): string {
+  const [rawPath] = src.split(/[?#]/, 1);
+  if (!rawPath) {
+    return "";
+  }
+
+  let normalized = rawPath.trim();
+  try {
+    normalized = decodeURIComponent(normalized);
+  } catch {
+    // Preserve partially encoded paths.
+  }
+
+  if (normalized.startsWith("~/")) {
+    return path.join(os.homedir(), normalized.slice(2));
+  }
+
+  return normalized;
+}
+
+async function encodeImageFileAsDataUri(
+  uri: vscode.Uri,
+): Promise<string | undefined> {
+  const mimeType = getMimeTypeForImage(uri.fsPath);
+  if (!mimeType) {
+    return undefined;
+  }
+
+  const contents = await fs.readFile(uri.fsPath);
+  return `data:${mimeType};base64,${contents.toString("base64")}`;
+}
+
+function getMimeTypeForImage(fsPath: string): string | undefined {
+  switch (path.extname(fsPath).toLowerCase()) {
+    case ".apng":
+      return "image/apng";
+    case ".avif":
+      return "image/avif";
+    case ".bmp":
+      return "image/bmp";
+    case ".gif":
+      return "image/gif";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".png":
+      return "image/png";
+    case ".svg":
+      return "image/svg+xml";
+    case ".webp":
+      return "image/webp";
+    default:
+      return undefined;
   }
 }
 

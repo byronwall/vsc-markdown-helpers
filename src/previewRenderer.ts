@@ -1,13 +1,30 @@
+import * as vscode from "vscode";
 import matter from "gray-matter";
 import MarkdownIt from "markdown-it";
 import anchor from "markdown-it-anchor";
 import { MarkdownTocItem, RenderedMarkdownDocument } from "./types";
 
-export function renderMarkdownDocument(text: string): RenderedMarkdownDocument {
+interface RenderMarkdownOptions {
+  baseUri?: vscode.Uri;
+  resolveImageSource?: (
+    src: string,
+    baseUri: vscode.Uri,
+  ) => Promise<string | undefined>;
+}
+
+const IMG_TAG_SRC_RE = /<img\b([^>]*?)\bsrc=(['"])(.*?)\2([^>]*)>/gi;
+
+export async function renderMarkdownDocument(
+  text: string,
+  options: RenderMarkdownOptions = {},
+): Promise<RenderedMarkdownDocument> {
   const parsed = matter(text);
   const toc: MarkdownTocItem[] = [];
   const markdown = createMarkdownRenderer(toc);
-  const bodyHtml = markdown.render(parsed.content);
+  const bodyHtml = await rewriteImageSources(
+    markdown.render(parsed.content),
+    options,
+  );
   const frontMatterHtml = renderFrontMatter(parsed.data);
 
   return {
@@ -19,7 +36,7 @@ export function renderMarkdownDocument(text: string): RenderedMarkdownDocument {
 function createMarkdownRenderer(toc: MarkdownTocItem[]): MarkdownIt {
   const markdown = new MarkdownIt({
     breaks: true,
-    html: false,
+    html: true,
     linkify: true,
     typographer: true,
   });
@@ -202,4 +219,55 @@ function escapeHtml(value: string): string {
 
 function escapeHtmlAttribute(value: string): string {
   return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
+async function rewriteImageSources(
+  html: string,
+  options: RenderMarkdownOptions,
+): Promise<string> {
+  if (!options.baseUri || !options.resolveImageSource) {
+    return html;
+  }
+
+  const matches = [...html.matchAll(IMG_TAG_SRC_RE)];
+  if (matches.length === 0) {
+    return html;
+  }
+
+  const replacements = await Promise.all(
+    matches.map(async (match) => {
+      const [, before, quote, source, after] = match;
+      const resolvedSource = await options.resolveImageSource!(
+        decodeHtmlAttribute(source),
+        options.baseUri!,
+      );
+      if (!resolvedSource) {
+        return match[0];
+      }
+
+      return `<img${before}src=${quote}${escapeHtmlAttribute(
+        resolvedSource,
+      )}${quote}${after}>`;
+    }),
+  );
+
+  let nextIndex = 0;
+  let rewritten = "";
+  for (const [replacementIndex, match] of matches.entries()) {
+    const index = match.index ?? 0;
+    rewritten += html.slice(nextIndex, index);
+    rewritten += replacements[replacementIndex] ?? match[0];
+    nextIndex = index + match[0].length;
+  }
+  rewritten += html.slice(nextIndex);
+  return rewritten;
+}
+
+function decodeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
 }
