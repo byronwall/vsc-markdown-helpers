@@ -2,7 +2,7 @@
     "name": "vsc-md-helpers",
     "displayName": "Markdown Helpers",
     "description": "Workspace markdown preview plus code-view helpers for file links, code blocks, and bounded wrapping",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "publisher": "byronwall",
     "license": "SEE LICENSE IN LICENSE",
     "repository": {
