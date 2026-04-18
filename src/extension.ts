@@ -351,6 +351,12 @@ export async function activate(
         await browserProvider?.refreshCurrentView();
       }
       if (
+        event.affectsConfiguration("markdownHelpers.previewTheme") ||
+        event.affectsConfiguration("markdownHelpers.previewFontScale")
+      ) {
+        await browserProvider?.refreshAppearanceSettings();
+      }
+      if (
         event.affectsConfiguration("markdownHelpers.extensions") ||
         event.affectsConfiguration("markdownHelpers.maxRecent")
       ) {

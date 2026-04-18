@@ -365,18 +365,6 @@ html.has-desktop-inspector .app-shell {
   transform: translateX(0.7rem);
 }
 
-.utility-panel-media {
-  top: calc(1rem + var(--topbar-height) + 0.5rem);
-  left: 50%;
-  width: min(70rem, calc(100vw - 3rem));
-  max-height: calc(100vh - var(--topbar-height) - 2.7rem);
-  transform: translateX(-50%);
-}
-
-.utility-panel-media.is-collapsed {
-  transform: translateX(-50%) translateY(-0.6rem) scale(0.99);
-}
-
 .panel-backdrop {
   position: fixed;
   inset: 0;
@@ -422,8 +410,7 @@ html.has-desktop-inspector .app-shell {
   }
 
   .utility-panel-files,
-  .utility-panel-inspector,
-  .utility-panel-media {
+  .utility-panel-inspector {
     top: calc(0.65rem + var(--topbar-height) + 0.4rem);
     left: 0.7rem;
     right: 0.7rem;
@@ -433,8 +420,7 @@ html.has-desktop-inspector .app-shell {
   }
 
   .utility-panel-files.is-collapsed,
-  .utility-panel-inspector.is-collapsed,
-  .utility-panel-media.is-collapsed {
+  .utility-panel-inspector.is-collapsed {
     transform: translateY(-0.5rem) scale(0.99);
   }
 }

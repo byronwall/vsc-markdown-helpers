@@ -24,6 +24,8 @@ export async function enhanceTables(container, tools) {
       continue;
     }
 
+    table.classList.add("table-fitted-preview");
+
     const block = document.createElement("section");
     block.className = "table-block";
 
@@ -52,6 +54,14 @@ export async function enhanceTables(container, tools) {
     actions.append(openButton);
     frame.append(table);
     block.append(actions, frame);
+
+    window.requestAnimationFrame(() => {
+      if (!frame.isConnected || !table.isConnected) {
+        return;
+      }
+
+      applyMainPreviewTableLayout(table, model, frame);
+    });
   }
 }
 
@@ -381,10 +391,61 @@ function createTableActionButton(label, onClick) {
   return button;
 }
 
-function fitColumnsToFrame(model, state, tableFrame) {
-  const visibleColumns = model.headers
+function applyMainPreviewTableLayout(table, model, tableFrame) {
+  const state = createTableLayoutState(model);
+  fitColumnsToFrame(model, state, tableFrame);
+
+  const visibleColumns = getVisibleColumns(model, state);
+  const colgroup = document.createElement("colgroup");
+  let totalWidth = 0;
+
+  for (const column of visibleColumns) {
+    const width =
+      state.columnWidths.get(column.index) ?? TABLE_COLUMN_MAX_WIDTH;
+    const col = document.createElement("col");
+    col.style.width = `${width}px`;
+    colgroup.append(col);
+    totalWidth += width;
+  }
+
+  const existingColgroup = table.querySelector(":scope > colgroup");
+  if (existingColgroup) {
+    existingColgroup.replaceWith(colgroup);
+  } else {
+    table.prepend(colgroup);
+  }
+
+  table.style.width = `${Math.ceil(totalWidth)}px`;
+  table.style.minWidth = "0";
+  table.style.tableLayout = "fixed";
+}
+
+function createTableLayoutState(model) {
+  return {
+    visibleColumns: new Set(model.headers.map((_, index) => index)),
+    columnFloorWidths: new Map(
+      model.headers.map((header, index) => [
+        index,
+        getColumnFloorWidth(model, index, header),
+      ]),
+    ),
+    columnWidths: new Map(
+      model.headers.map((header, index) => [
+        index,
+        getInitialColumnWidth(model, index, header),
+      ]),
+    ),
+  };
+}
+
+function getVisibleColumns(model, state) {
+  return model.headers
     .map((headerText, index) => ({ header: headerText, index }))
     .filter(({ index }) => state.visibleColumns.has(index));
+}
+
+function fitColumnsToFrame(model, state, tableFrame) {
+  const visibleColumns = getVisibleColumns(model, state);
 
   if (visibleColumns.length === 0) {
     return;
@@ -446,7 +507,7 @@ function getColumnFloorWidth(model, columnIndex, header) {
     (max, sample) => Math.max(max, normalizeTableCellText(sample).length),
     0,
   );
-  return clamp(longest * 7.4 + 56, 140, TABLE_COLUMN_MAX_WIDTH);
+  return clamp(longest * 7.4 + 40, 84, TABLE_COLUMN_MAX_WIDTH);
 }
 
 function getInitialColumnWidth(model, columnIndex, header) {
@@ -458,5 +519,5 @@ function getInitialColumnWidth(model, columnIndex, header) {
     (max, sample) => Math.max(max, normalizeTableCellText(sample).length),
     0,
   );
-  return clamp(longest * 8.2 + 48, 160, TABLE_COLUMN_MAX_WIDTH);
+  return clamp(longest * 8.2 + 44, 96, TABLE_COLUMN_MAX_WIDTH);
 }

@@ -11,7 +11,6 @@ export function createPanelRenderingController({
   scrollToHeadingById,
   setFilesPanelOpen,
   setInspectorPanel,
-  setMediaPanelOpen,
   state,
   vscode,
 }) {
@@ -157,72 +156,6 @@ export function createPanelRenderingController({
     updateInspectorCopy();
   }
 
-  function renderMediaPanel() {
-    const hasMedia = state.mediaItems.length > 0;
-    if (!hasMedia) {
-      state.activeMediaIndex = 0;
-    } else if (state.activeMediaIndex >= state.mediaItems.length) {
-      state.activeMediaIndex = 0;
-    }
-
-    elements.toggleMediaButton.disabled = !hasMedia;
-    elements.toggleMediaButton.setAttribute("aria-disabled", String(!hasMedia));
-    elements.mediaEmptyState.classList.toggle("hidden", hasMedia);
-    elements.mediaStage.classList.toggle("hidden", !hasMedia);
-    elements.mediaThumbs.innerHTML = "";
-
-    if (!hasMedia) {
-      elements.mediaStageImage.removeAttribute("src");
-      elements.mediaStageImage.alt = "";
-      elements.mediaCounter.textContent = "";
-      elements.mediaCaption.textContent = "";
-      elements.mediaMeta.textContent = "";
-      elements.mediaSubtitle.textContent = state.selectedPath
-        ? "This file does not render any images yet."
-        : "Choose a markdown file to browse its rendered images.";
-      elements.mediaPrevButton.disabled = true;
-      elements.mediaNextButton.disabled = true;
-      if (state.mediaPanelOpen) {
-        setMediaPanelOpen(false);
-      }
-      return;
-    }
-
-    const item = state.mediaItems[state.activeMediaIndex];
-    elements.mediaStageImage.src = item.src;
-    elements.mediaStageImage.alt = item.alt || item.caption || "Preview image";
-    elements.mediaCounter.textContent = `${state.activeMediaIndex + 1} of ${state.mediaItems.length}`;
-    elements.mediaCaption.textContent = item.caption;
-    elements.mediaMeta.textContent = item.meta;
-    elements.mediaSubtitle.textContent = `${state.mediaItems.length} rendered image${state.mediaItems.length === 1 ? "" : "s"} in this file.`;
-    elements.mediaPrevButton.disabled = state.mediaItems.length < 2;
-    elements.mediaNextButton.disabled = state.mediaItems.length < 2;
-
-    state.mediaItems.forEach((mediaItem, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "media-thumb-button";
-      if (index === state.activeMediaIndex) {
-        button.classList.add("is-active");
-      }
-      button.setAttribute(
-        "aria-label",
-        `Show image ${index + 1}: ${mediaItem.caption}`,
-      );
-
-      const image = document.createElement("img");
-      image.src = mediaItem.src;
-      image.alt = mediaItem.alt || mediaItem.caption;
-
-      button.append(image);
-      button.addEventListener("click", () => {
-        state.activeMediaIndex = index;
-        renderMediaPanel();
-      });
-      elements.mediaThumbs.append(button);
-    });
-  }
-
   function updateInspectorCopy() {
     if (state.activeInspectorPanel === "links") {
       elements.inspectorEyebrow.textContent = "Links";
@@ -274,7 +207,6 @@ export function createPanelRenderingController({
   return {
     renderFiles,
     renderLinks,
-    renderMediaPanel,
     renderToc,
     updateInspectorCopy,
   };

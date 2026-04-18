@@ -16,6 +16,17 @@ import {
   formatWordCount,
   hasTextSelectionWithin,
 } from "./viewer/shared.js";
+import {
+  applyPreviewAppearance,
+  clampPreviewFontScale,
+  DEFAULT_PREVIEW_FONT_SCALE,
+  DEFAULT_PREVIEW_THEME_ID,
+  PREVIEW_FONT_SCALE_MAX,
+  PREVIEW_FONT_SCALE_MIN,
+  PREVIEW_FONT_SCALE_STEP,
+  PREVIEW_THEMES,
+} from "./viewer/appearance.js";
+import { createImageViewerController } from "./viewer/imageViewer.js";
 import { createUiStateController } from "./viewer/uiState.js";
 
 const vscode = acquireVsCodeApi();
@@ -31,7 +42,6 @@ const state = {
   mediaItems: [],
   filesPanelOpen: false,
   activeInspectorPanel: undefined,
-  mediaPanelOpen: false,
   activeMediaIndex: 0,
   filesFilterQuery: "",
   modalCleanup: undefined,
@@ -39,6 +49,10 @@ const state = {
   modalToken: 0,
   modalImmersive: false,
   modalScrollTop: 0,
+  previewAppearance: applyPreviewAppearance({
+    themeId: DEFAULT_PREVIEW_THEME_ID,
+    fontScale: DEFAULT_PREVIEW_FONT_SCALE,
+  }),
   previewRenderToken: 0,
   headingHighlightTimer: undefined,
 };
@@ -49,6 +63,7 @@ let panelRendering;
 let previewNavigation;
 let uiState;
 let modalController;
+let imageViewer;
 
 const pendingPreviewLinkResolutions = new Map();
 let nextPreviewLinkResolutionRequestId = 1;
@@ -86,9 +101,20 @@ function initialize() {
     scrollToHeadingById: (id) => previewNavigation.scrollToHeadingById(id),
     setFilesPanelOpen: (...args) => uiState.setFilesPanelOpen(...args),
     setInspectorPanel: (...args) => uiState.setInspectorPanel(...args),
-    setMediaPanelOpen: (...args) => uiState.setMediaPanelOpen(...args),
     state,
     vscode,
+  });
+
+  modalController = createModalController({
+    elements,
+    state,
+    getCurrentScrollTop: () => previewNavigation.getCurrentScrollTop(),
+  });
+
+  imageViewer = createImageViewerController({
+    elements,
+    showModal: (options) => modalController.showModal(options),
+    state,
   });
 
   previewNavigation = createPreviewNavigationController({
@@ -96,10 +122,9 @@ function initialize() {
     debugToc,
     elements,
     hasTextSelectionWithin,
-    openMediaPanelAt: (index) => uiState.openMediaPanelAt(index),
-    renderMediaPanel: () => panelRendering.renderMediaPanel(),
+    openImageViewerAt: (index, source) =>
+      imageViewer.openImageViewerAt(index, source),
     renderToc: () => panelRendering.renderToc(),
-    showModal: (options) => modalController.showModal(options),
     state,
     vscode,
   });
@@ -107,16 +132,9 @@ function initialize() {
   uiState = createUiStateController({
     elements,
     isDesktopInspectorLayout: getDesktopInspectorLayout,
-    renderMediaPanel: () => panelRendering.renderMediaPanel(),
     state,
     syncTopbarMetrics: () => syncTopbarMetrics(elements),
     updateInspectorCopy: () => panelRendering.updateInspectorCopy(),
-  });
-
-  modalController = createModalController({
-    elements,
-    state,
-    getCurrentScrollTop: () => previewNavigation.getCurrentScrollTop(),
   });
 
   isInitialized = true;
@@ -132,16 +150,19 @@ function initialize() {
   vscode.postMessage({ type: "ready" });
   panelRendering.renderToc();
   panelRendering.renderLinks();
-  panelRendering.renderMediaPanel();
   panelRendering.renderFiles();
   uiState.applyFilesPanelState();
   uiState.applyInspectorPanelState();
-  uiState.applyMediaPanelState();
+  imageViewer.syncTriggerState();
 }
 
 function bindUIEvents() {
   elements.refreshButton.addEventListener("click", () => {
     vscode.postMessage({ type: "refresh" });
+  });
+
+  elements.toggleAppearanceButton.addEventListener("click", () => {
+    openAppearanceModal();
   });
 
   elements.openTextButton.addEventListener("click", () => {
@@ -164,7 +185,7 @@ function bindUIEvents() {
   });
 
   elements.toggleMediaButton.addEventListener("click", () => {
-    uiState.setMediaPanelOpen(!state.mediaPanelOpen);
+    imageViewer.openImageViewerAt(state.activeMediaIndex, "toolbar");
   });
 
   elements.filesFilterInput.addEventListener("input", (event) => {
@@ -174,18 +195,6 @@ function bindUIEvents() {
 
   elements.inspectorCloseButton.addEventListener("click", () => {
     uiState.setInspectorPanel(undefined, { returnFocus: true });
-  });
-
-  elements.mediaCloseButton.addEventListener("click", () => {
-    uiState.setMediaPanelOpen(false, { returnFocus: true });
-  });
-
-  elements.mediaPrevButton.addEventListener("click", () => {
-    uiState.stepMedia(-1);
-  });
-
-  elements.mediaNextButton.addEventListener("click", () => {
-    uiState.stepMedia(1);
   });
 
   elements.panelBackdrop.addEventListener("click", () => {
@@ -231,7 +240,6 @@ function bindWindowEvents() {
 
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("keydown", handleEscapeKey);
-  document.addEventListener("keydown", handleMediaArrowKeys);
   window.addEventListener("message", handleWebviewMessage);
 }
 
@@ -250,14 +258,6 @@ function handleDocumentClick(event) {
     !elements.toggleFilesButton.contains(event.target)
   ) {
     uiState.setFilesPanelOpen(false);
-  }
-
-  if (
-    state.mediaPanelOpen &&
-    !elements.mediaPanel.contains(event.target) &&
-    !elements.toggleMediaButton.contains(event.target)
-  ) {
-    uiState.setMediaPanelOpen(false);
   }
 
   if (
@@ -281,11 +281,6 @@ function handleEscapeKey(event) {
     return;
   }
 
-  if (state.mediaPanelOpen) {
-    uiState.setMediaPanelOpen(false, { returnFocus: true });
-    return;
-  }
-
   if (state.activeInspectorPanel) {
     uiState.setInspectorPanel(undefined, { returnFocus: true });
     return;
@@ -293,22 +288,6 @@ function handleEscapeKey(event) {
 
   if (state.filesPanelOpen) {
     uiState.setFilesPanelOpen(false, { returnFocus: true });
-  }
-}
-
-function handleMediaArrowKeys(event) {
-  if (!state.mediaPanelOpen) {
-    return;
-  }
-
-  if (event.key === "ArrowLeft") {
-    event.preventDefault();
-    uiState.stepMedia(-1);
-  }
-
-  if (event.key === "ArrowRight") {
-    event.preventDefault();
-    uiState.stepMedia(1);
   }
 }
 
@@ -329,6 +308,12 @@ function handleWebviewMessage(event) {
       break;
     case "fileError":
       showError(message.message || "Unable to load markdown file.");
+      break;
+    case "previewAppearance":
+      applyIncomingPreviewAppearance({
+        themeId: message.themeId,
+        fontScale: message.fontScale,
+      });
       break;
     case "previewLinksResolved": {
       const resolve = pendingPreviewLinkResolutions.get(message.requestId);
@@ -351,6 +336,218 @@ function handleWebviewMessage(event) {
     default:
       break;
   }
+}
+
+function handleThemeGridClick(event) {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const button = event.target.closest("button[data-theme-id]");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  updatePreviewAppearance({ themeId: button.dataset.themeId });
+}
+
+function applyIncomingPreviewAppearance(preferences) {
+  state.previewAppearance = applyPreviewAppearance(preferences);
+}
+
+function updatePreviewAppearance(partialPreferences) {
+  const nextAppearance = {
+    ...state.previewAppearance,
+    ...partialPreferences,
+  };
+  const nextApplied = applyPreviewAppearance(nextAppearance);
+  const changedTheme = nextApplied.themeId !== state.previewAppearance.themeId;
+  const changedFontScale =
+    nextApplied.fontScale !== state.previewAppearance.fontScale;
+
+  if (!changedTheme && !changedFontScale) {
+    renderAppearanceControls();
+    return;
+  }
+
+  state.previewAppearance = nextApplied;
+  vscode.postMessage({
+    type: "updatePreviewAppearance",
+    ...(changedTheme ? { themeId: nextApplied.themeId } : {}),
+    ...(changedFontScale ? { fontScale: nextApplied.fontScale } : {}),
+  });
+}
+
+function renderThemeGrid(container, mode, selectedThemeId) {
+  container.innerHTML = "";
+  const themes = PREVIEW_THEMES.filter((theme) => theme.mode === mode);
+
+  for (const theme of themes) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "appearance-theme-button";
+    button.dataset.themeId = theme.id;
+    button.setAttribute("aria-pressed", String(theme.id === selectedThemeId));
+    if (theme.id === selectedThemeId) {
+      button.classList.add("is-active");
+    }
+
+    const swatch = document.createElement("span");
+    swatch.className = "appearance-theme-swatch";
+    swatch.style.setProperty("--swatch-canvas", theme.canvas);
+    swatch.style.setProperty("--swatch-surface", theme.surface);
+    swatch.style.setProperty("--swatch-ink", theme.ink);
+    swatch.style.setProperty("--swatch-accent", theme.accent);
+
+    const label = document.createElement("span");
+    label.className = "appearance-theme-label";
+    label.textContent = theme.label;
+
+    button.append(swatch, label);
+    container.append(button);
+  }
+}
+
+function formatFontScale(fontScale) {
+  return `${Math.round(fontScale * 100)}%`;
+}
+
+function openAppearanceModal() {
+  const content = document.createElement("div");
+  content.className = "appearance-modal";
+
+  const intro = document.createElement("p");
+  intro.className = "appearance-menu-subtitle";
+  intro.textContent =
+    "Click any theme swatch to save it immediately. Text size updates the rendered markdown content only.";
+
+  const lightSection = document.createElement("section");
+  lightSection.className = "appearance-section";
+  lightSection.append(
+    createAppearanceSectionHeading(
+      "Light Themes",
+      "Eight brighter palettes with live previews.",
+      true,
+    ),
+  );
+  const lightThemeGrid = document.createElement("div");
+  lightThemeGrid.className = "appearance-theme-grid";
+  lightSection.append(lightThemeGrid);
+
+  const darkSection = document.createElement("section");
+  darkSection.className = "appearance-section";
+  darkSection.append(
+    createAppearanceSectionHeading(
+      "Dark Themes",
+      "Eight darker palettes with live previews.",
+      true,
+    ),
+  );
+  const darkThemeGrid = document.createElement("div");
+  darkThemeGrid.className = "appearance-theme-grid";
+  darkSection.append(darkThemeGrid);
+
+  const fontSection = document.createElement("section");
+  fontSection.className = "appearance-section";
+  const fontHeader = createAppearanceSectionHeading(
+    "Text Size",
+    "Make rendered markdown easier to scan.",
+    false,
+  );
+  const fontValue = document.createElement("p");
+  fontValue.className = "appearance-font-value";
+  fontHeader.append(fontValue);
+  const fontControls = document.createElement("div");
+  fontControls.className = "appearance-font-controls";
+  const decreaseButton = createAppearanceFontButton("A-", "Decrease text size");
+  const resetButton = createAppearanceFontButton("Reset", "Reset text size");
+  const increaseButton = createAppearanceFontButton("A+", "Increase text size");
+  fontControls.append(decreaseButton, resetButton, increaseButton);
+  fontSection.append(fontHeader, fontControls);
+
+  content.append(intro, lightSection, darkSection, fontSection);
+
+  const refreshModalControls = () => {
+    renderThemeGrid(lightThemeGrid, "light", state.previewAppearance.themeId);
+    renderThemeGrid(darkThemeGrid, "dark", state.previewAppearance.themeId);
+    fontValue.textContent = formatFontScale(state.previewAppearance.fontScale);
+    decreaseButton.disabled =
+      state.previewAppearance.fontScale <= PREVIEW_FONT_SCALE_MIN;
+    increaseButton.disabled =
+      state.previewAppearance.fontScale >= PREVIEW_FONT_SCALE_MAX;
+    resetButton.disabled =
+      state.previewAppearance.fontScale === DEFAULT_PREVIEW_FONT_SCALE;
+  };
+
+  const handleModalThemeClick = (event) => {
+    if (!(event.target instanceof Element)) {
+      return;
+    }
+    const button = event.target.closest("button[data-theme-id]");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    updatePreviewAppearance({ themeId: button.dataset.themeId });
+    refreshModalControls();
+  };
+
+  lightThemeGrid.addEventListener("click", handleModalThemeClick);
+  darkThemeGrid.addEventListener("click", handleModalThemeClick);
+  decreaseButton.addEventListener("click", () => {
+    updatePreviewAppearance({
+      fontScale: clampPreviewFontScale(
+        state.previewAppearance.fontScale - PREVIEW_FONT_SCALE_STEP,
+      ),
+    });
+    refreshModalControls();
+  });
+  resetButton.addEventListener("click", () => {
+    updatePreviewAppearance({ fontScale: DEFAULT_PREVIEW_FONT_SCALE });
+    refreshModalControls();
+  });
+  increaseButton.addEventListener("click", () => {
+    updatePreviewAppearance({
+      fontScale: clampPreviewFontScale(
+        state.previewAppearance.fontScale + PREVIEW_FONT_SCALE_STEP,
+      ),
+    });
+    refreshModalControls();
+  });
+
+  refreshModalControls();
+  elements.toggleAppearanceButton.classList.add("is-active");
+  const modal = modalController.showModal({
+    title: "Preview Style",
+    subtitle: "Choose a saved color theme and adjust rendered text size.",
+    content,
+    wide: true,
+  });
+  modal.setOnClose(() => {
+    elements.toggleAppearanceButton.classList.remove("is-active");
+  });
+}
+
+function createAppearanceSectionHeading(title, description, compact) {
+  const header = document.createElement("div");
+  header.className = `appearance-section-heading${compact ? " compact" : ""}`;
+  const textWrap = document.createElement("div");
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const descriptionText = document.createElement("p");
+  descriptionText.textContent = description;
+  textWrap.append(heading, descriptionText);
+  header.append(textWrap);
+  return header;
+}
+
+function createAppearanceFontButton(label, ariaLabel) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost-button appearance-font-button";
+  button.textContent = label;
+  button.setAttribute("aria-label", ariaLabel);
+  return button;
 }
 
 function renderPreview(path, html) {
@@ -380,7 +577,7 @@ function renderPreview(path, html) {
   previewNavigation.collectPreviewArtifacts();
   panelRendering.renderToc();
   panelRendering.renderFiles();
-  panelRendering.renderMediaPanel();
+  imageViewer.syncTriggerState();
 
   void enhancePreview(elements.previewContent, {
     vscode,
@@ -398,15 +595,15 @@ function renderPreview(path, html) {
     }
 
     previewNavigation.bindInternalAnchorLinks();
+    imageViewer.syncTriggerState();
     previewNavigation.collectPreviewArtifacts();
     if (getDesktopInspectorLayout() && !state.activeInspectorPanel) {
       state.activeInspectorPanel = "toc";
     }
     panelRendering.renderToc();
     panelRendering.renderLinks();
-    panelRendering.renderMediaPanel();
     uiState.applyInspectorPanelState();
-    uiState.applyMediaPanelState();
+    imageViewer.syncTriggerState();
     previewNavigation.syncActiveHeading();
   });
 }
@@ -478,7 +675,7 @@ function showError(message) {
   state.links = [];
   state.mediaItems = [];
   panelRendering.renderLinks();
-  panelRendering.renderMediaPanel();
+  imageViewer.syncTriggerState();
 }
 
 function clearError() {

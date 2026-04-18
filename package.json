@@ -192,6 +192,37 @@
                     "maximum": 180,
                     "description": "Maximum rendered markdown content width, in characters, inside the preview panel."
                 },
+                "markdownHelpers.previewTheme": {
+                    "type": "string",
+                    "enum": [
+                        "sage",
+                        "parchment",
+                        "linen",
+                        "terracotta",
+                        "glacier",
+                        "citrus",
+                        "harbor",
+                        "rosewood",
+                        "midnight",
+                        "graphite",
+                        "ember",
+                        "lagoon",
+                        "forest-night",
+                        "oxblood",
+                        "storm",
+                        "charcoal-sun"
+                    ],
+                    "default": "sage",
+                    "description": "Saved color theme for the Markdown Helpers preview panel."
+                },
+                "markdownHelpers.previewFontScale": {
+                    "type": "number",
+                    "default": 1,
+                    "minimum": 0.85,
+                    "maximum": 1.3,
+                    "multipleOf": 0.05,
+                    "description": "Saved text scale for rendered markdown content in the preview panel."
+                },
                 "markdownHelpers.recentFilesFilter": {
                     "type": "string",
                     "enum": [

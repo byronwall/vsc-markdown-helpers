@@ -98,6 +98,7 @@
   --radius-xs: 999px;
   --content-width: 76ch;
   --content-width-cap: 50rem;
+  --content-font-scale: 1;
   --sidebar-width: 18rem;
   --outline-width: 16rem;
   --topbar-height: 5.5rem;
@@ -195,8 +196,274 @@
     var(--theme-ink) 44%,
     var(--theme-surface)
   );
+  --control-surface: color-mix(
+    in srgb,
+    var(--surface-strong) 92%,
+    var(--document-bg-strong)
+  );
+  --control-surface-hover: color-mix(
+    in srgb,
+    var(--accent-soft) 44%,
+    var(--surface-strong)
+  );
+  --control-focus: color-mix(
+    in srgb,
+    var(--accent) 60%,
+    var(--document-bg-strong)
+  );
+  --interactive-tag-bg: color-mix(
+    in srgb,
+    var(--accent-soft) 60%,
+    var(--surface-elevated)
+  );
+  --interactive-tag-bg-strong: color-mix(
+    in srgb,
+    var(--accent-soft) 76%,
+    var(--surface-elevated)
+  );
+  --interactive-tag-warm-bg: color-mix(
+    in srgb,
+    var(--accent-warm-soft) 72%,
+    var(--surface-elevated)
+  );
+  --interactive-tag-warm-bg-strong: color-mix(
+    in srgb,
+    var(--accent-warm-soft) 86%,
+    var(--surface-elevated)
+  );
+  --hover-card-border: color-mix(
+    in srgb,
+    var(--line-strong) 82%,
+    var(--surface-elevated)
+  );
+  --hover-card-bg-start: color-mix(
+    in srgb,
+    var(--surface-elevated) 96%,
+    var(--document-bg-strong)
+  );
+  --hover-card-bg-end: color-mix(in srgb, var(--surface-strong) 92%, var(--bg));
+  --code-button-bg: color-mix(
+    in srgb,
+    var(--surface-elevated) 94%,
+    var(--code-bg)
+  );
+  --code-button-bg-hover: color-mix(
+    in srgb,
+    var(--accent-soft) 30%,
+    var(--surface-elevated)
+  );
+  --code-card-bg: color-mix(
+    in srgb,
+    var(--code-bg) 88%,
+    var(--surface-elevated)
+  );
+  --code-card-border: color-mix(
+    in srgb,
+    var(--code-line) 112%,
+    var(--surface-strong)
+  );
+  --code-viewport-bg: color-mix(
+    in srgb,
+    var(--code-bg-strong) 82%,
+    var(--surface)
+  );
+  --code-fade-end: color-mix(
+    in srgb,
+    var(--code-bg-strong) 90%,
+    var(--surface-elevated)
+  );
+  --code-shadow: 0 10px 24px
+    color-mix(in srgb, var(--theme-ink) 8%, transparent);
   --font-sans:
     "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
   --font-ui: "Avenir Next", "Segoe UI", sans-serif;
   --font-mono: "SF Mono", Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+:root[data-preview-theme-mode="dark"] {
+  --bg-strong: color-mix(
+    in srgb,
+    var(--theme-canvas) 92%,
+    var(--theme-surface)
+  );
+  --surface: color-mix(in srgb, var(--theme-surface) 84%, transparent);
+  --surface-strong: color-mix(
+    in srgb,
+    var(--theme-surface) 90%,
+    var(--theme-canvas)
+  );
+  --surface-elevated: color-mix(
+    in srgb,
+    var(--theme-surface) 94%,
+    var(--theme-canvas)
+  );
+  --document-bg: color-mix(in srgb, var(--theme-surface) 84%, var(--bg));
+  --document-bg-strong: color-mix(in srgb, var(--theme-surface) 92%, var(--bg));
+  --ink-muted: color-mix(in srgb, var(--theme-ink) 62%, var(--theme-surface));
+  --ink-soft: color-mix(in srgb, var(--theme-ink) 44%, var(--theme-surface));
+  --line: color-mix(in srgb, var(--theme-ink) 10%, transparent);
+  --line-strong: color-mix(in srgb, var(--theme-ink) 16%, transparent);
+  --accent-soft: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  --accent-warm-soft: color-mix(
+    in srgb,
+    var(--theme-accent-warm) 16%,
+    transparent
+  );
+  --accent-cool-soft: color-mix(
+    in srgb,
+    var(--theme-accent-cool) 16%,
+    transparent
+  );
+  --neutral-soft: color-mix(in srgb, var(--theme-ink) 10%, transparent);
+  --shadow: 0 20px 44px color-mix(in srgb, black 42%, transparent);
+  --shadow-soft: 0 10px 24px color-mix(in srgb, black 32%, transparent);
+  --document-shadow:
+    0 24px 60px color-mix(in srgb, black 44%, transparent),
+    0 1px 0 color-mix(in srgb, var(--theme-ink) 6%, transparent) inset;
+  --scrollbar-track: color-mix(in srgb, var(--theme-ink) 6%, transparent);
+  --scrollbar-thumb: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  --scrollbar-thumb-strong: color-mix(
+    in srgb,
+    var(--theme-accent) 24%,
+    transparent
+  );
+  --panel-overlay: color-mix(in srgb, black 54%, transparent);
+  --page-glow-accent: color-mix(in srgb, var(--accent) 5%, transparent);
+  --page-glow-accent-alt: color-mix(
+    in srgb,
+    var(--accent-warm) 6%,
+    transparent
+  );
+  --header-sheen: color-mix(in srgb, var(--theme-ink) 6%, transparent);
+  --panel-backdrop-start: color-mix(in srgb, black 40%, transparent);
+  --panel-backdrop-end: color-mix(in srgb, black 60%, transparent);
+  --card-surface-start: color-mix(
+    in srgb,
+    var(--surface-elevated) 94%,
+    var(--bg)
+  );
+  --card-surface-end: color-mix(in srgb, var(--surface-strong) 90%, var(--bg));
+  --card-shadow: 0 14px 28px color-mix(in srgb, black 28%, transparent);
+  --media-stage-glow: color-mix(in srgb, var(--accent) 5%, transparent);
+  --media-stage-start: color-mix(
+    in srgb,
+    var(--surface-elevated) 92%,
+    var(--accent-soft)
+  );
+  --media-stage-end: color-mix(in srgb, var(--surface-strong) 88%, var(--bg));
+  --media-control-surface: color-mix(
+    in srgb,
+    var(--surface-elevated) 92%,
+    var(--accent-soft)
+  );
+  --media-shadow: 0 20px 44px color-mix(in srgb, black 36%, transparent);
+  --media-shadow-soft: 0 12px 24px color-mix(in srgb, black 24%, transparent);
+  --media-shadow-strong: 0 20px 40px color-mix(in srgb, black 40%, transparent);
+  --code-bg: color-mix(in srgb, var(--theme-canvas) 72%, var(--theme-surface));
+  --code-bg-strong: color-mix(
+    in srgb,
+    var(--theme-canvas) 58%,
+    var(--theme-surface)
+  );
+  --code-line: color-mix(in srgb, var(--theme-ink) 12%, transparent);
+  --code-ink: color-mix(in srgb, var(--theme-ink) 94%, var(--theme-surface));
+  --code-muted: color-mix(in srgb, var(--theme-ink) 56%, var(--theme-surface));
+  --code-accent: color-mix(in srgb, var(--theme-accent) 70%, var(--theme-ink));
+  --code-keyword: color-mix(
+    in srgb,
+    var(--theme-danger) 40%,
+    var(--theme-accent-cool)
+  );
+  --code-string: color-mix(
+    in srgb,
+    var(--theme-accent-warm) 54%,
+    var(--theme-danger)
+  );
+  --code-number: color-mix(
+    in srgb,
+    var(--theme-accent-cool) 76%,
+    var(--theme-ink)
+  );
+  --code-comment: color-mix(
+    in srgb,
+    var(--theme-ink) 36%,
+    var(--theme-surface)
+  );
+  --control-surface: color-mix(
+    in srgb,
+    var(--surface-elevated) 90%,
+    var(--document-bg-strong)
+  );
+  --control-surface-hover: color-mix(
+    in srgb,
+    var(--accent-soft) 24%,
+    var(--surface-elevated)
+  );
+  --control-focus: color-mix(
+    in srgb,
+    var(--accent) 48%,
+    var(--surface-elevated)
+  );
+  --interactive-tag-bg: color-mix(
+    in srgb,
+    var(--accent-soft) 44%,
+    var(--surface-elevated)
+  );
+  --interactive-tag-bg-strong: color-mix(
+    in srgb,
+    var(--accent-soft) 58%,
+    var(--surface-elevated)
+  );
+  --interactive-tag-warm-bg: color-mix(
+    in srgb,
+    var(--accent-warm-soft) 48%,
+    var(--surface-elevated)
+  );
+  --interactive-tag-warm-bg-strong: color-mix(
+    in srgb,
+    var(--accent-warm-soft) 60%,
+    var(--surface-elevated)
+  );
+  --hover-card-border: color-mix(
+    in srgb,
+    var(--line-strong) 72%,
+    var(--surface-elevated)
+  );
+  --hover-card-bg-start: color-mix(
+    in srgb,
+    var(--surface-elevated) 96%,
+    var(--document-bg-strong)
+  );
+  --hover-card-bg-end: color-mix(in srgb, var(--surface-strong) 94%, var(--bg));
+  --code-button-bg: color-mix(
+    in srgb,
+    var(--surface-elevated) 84%,
+    var(--code-bg)
+  );
+  --code-button-bg-hover: color-mix(
+    in srgb,
+    var(--accent-soft) 22%,
+    var(--surface-elevated)
+  );
+  --code-card-bg: color-mix(
+    in srgb,
+    var(--code-bg) 90%,
+    var(--surface-elevated)
+  );
+  --code-card-border: color-mix(
+    in srgb,
+    var(--code-line) 104%,
+    var(--surface-strong)
+  );
+  --code-viewport-bg: color-mix(
+    in srgb,
+    var(--code-bg-strong) 90%,
+    var(--surface)
+  );
+  --code-fade-end: color-mix(
+    in srgb,
+    var(--code-bg-strong) 96%,
+    var(--surface)
+  );
+  --code-shadow: 0 10px 24px color-mix(in srgb, black 24%, transparent);
 }

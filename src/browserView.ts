@@ -25,6 +25,11 @@ interface WebviewFileSummary {
   wordCount: number;
 }
 
+const DEFAULT_PREVIEW_THEME = "sage";
+const DEFAULT_PREVIEW_FONT_SCALE = 1;
+const MIN_PREVIEW_FONT_SCALE = 0.85;
+const MAX_PREVIEW_FONT_SCALE = 1.3;
+
 export class MarkdownBrowserViewProvider implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private selectedPath: string | undefined;
@@ -75,6 +80,10 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
       return;
     }
     await this.loadFile(this.selectedPath);
+  }
+
+  public async refreshAppearanceSettings(): Promise<void> {
+    await this.postPreviewAppearance();
   }
 
   private async ensurePanel(): Promise<vscode.WebviewPanel> {
@@ -133,6 +142,18 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
       type: "files",
       files,
       selectedPath: this.selectedPath,
+    });
+  }
+
+  private async postPreviewAppearance(): Promise<void> {
+    if (!this.panel) {
+      return;
+    }
+
+    await this.panel.webview.postMessage({
+      type: "previewAppearance",
+      themeId: getConfiguredPreviewTheme(),
+      fontScale: getConfiguredPreviewFontScale(),
     });
   }
 
@@ -199,11 +220,14 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
       requestId?: string;
       content?: string;
       language?: string;
+      themeId?: string;
+      fontScale?: number;
     };
 
     switch (typed.type) {
       case "ready":
         await this.postFiles();
+        await this.postPreviewAppearance();
         if (this.selectedPath) {
           await this.loadFile(this.selectedPath);
         }
@@ -258,9 +282,50 @@ export class MarkdownBrowserViewProvider implements vscode.Disposable {
           await this.resolvePreviewLinkHover(typed.requestId, typed.href);
         }
         break;
+      case "updatePreviewAppearance":
+        await this.updatePreviewAppearance({
+          themeId: typed.themeId,
+          fontScale: typed.fontScale,
+        });
+        break;
       default:
         break;
     }
+  }
+
+  private async updatePreviewAppearance(preferences: {
+    themeId?: string;
+    fontScale?: number;
+  }): Promise<void> {
+    const updates: Thenable<void>[] = [];
+    const configuration = vscode.workspace.getConfiguration("markdownHelpers");
+
+    if (typeof preferences.themeId === "string") {
+      const nextTheme = preferences.themeId.trim() || DEFAULT_PREVIEW_THEME;
+      updates.push(
+        configuration.update(
+          "previewTheme",
+          nextTheme,
+          vscode.ConfigurationTarget.Global,
+        ),
+      );
+    }
+
+    if (typeof preferences.fontScale === "number") {
+      updates.push(
+        configuration.update(
+          "previewFontScale",
+          clampPreviewFontScale(preferences.fontScale),
+          vscode.ConfigurationTarget.Global,
+        ),
+      );
+    }
+
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
+
+    await this.postPreviewAppearance();
   }
 
   private async resolvePreviewLinks(
@@ -472,6 +537,28 @@ function getWebviewResourceRoots(extensionUri: vscode.Uri): vscode.Uri[] {
   const workspaceRoots =
     vscode.workspace.workspaceFolders?.map((folder) => folder.uri) ?? [];
   return [vscode.Uri.joinPath(extensionUri, "media"), ...workspaceRoots];
+}
+
+function getConfiguredPreviewTheme(): string {
+  const value = vscode.workspace
+    .getConfiguration("markdownHelpers")
+    .get<string>("previewTheme", DEFAULT_PREVIEW_THEME);
+  return value?.trim() ? value.trim() : DEFAULT_PREVIEW_THEME;
+}
+
+function getConfiguredPreviewFontScale(): number {
+  const value = vscode.workspace
+    .getConfiguration("markdownHelpers")
+    .get<number>("previewFontScale", DEFAULT_PREVIEW_FONT_SCALE);
+  return clampPreviewFontScale(value);
+}
+
+function clampPreviewFontScale(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_PREVIEW_FONT_SCALE;
+  }
+
+  return Math.round(Math.min(MAX_PREVIEW_FONT_SCALE, Math.max(MIN_PREVIEW_FONT_SCALE, value)) * 100) / 100;
 }
 
 function isWebSafeImageSource(src: string): boolean {

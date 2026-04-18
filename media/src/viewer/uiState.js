@@ -1,7 +1,6 @@
 export function createUiStateController({
   elements,
   isDesktopInspectorLayout,
-  renderMediaPanel,
   state,
   syncTopbarMetrics,
   updateInspectorCopy,
@@ -27,7 +26,8 @@ export function createUiStateController({
     const activePanel = state.activeInspectorPanel;
     const isOpen = Boolean(activePanel);
     const desktop = isDesktopInspectorLayout();
-    const activeInspectorWidth = desktop && isOpen ? "var(--inspector-width)" : "0px";
+    const activeInspectorWidth =
+      desktop && isOpen ? "var(--inspector-width)" : "0px";
     elements.inspectorPanel.classList.toggle("is-collapsed", !isOpen);
     elements.inspectorPanel.classList.toggle(
       "is-desktop-docked",
@@ -61,23 +61,6 @@ export function createUiStateController({
       activeInspectorWidth,
     );
     updateInspectorCopy();
-    applyPanelBackdropState();
-  }
-
-  function applyMediaPanelState() {
-    elements.mediaPanel.classList.toggle("is-collapsed", !state.mediaPanelOpen);
-    elements.mediaPanel.setAttribute(
-      "aria-hidden",
-      String(!state.mediaPanelOpen),
-    );
-    elements.toggleMediaButton.setAttribute(
-      "aria-expanded",
-      String(state.mediaPanelOpen),
-    );
-    elements.toggleMediaButton.classList.toggle(
-      "is-active",
-      state.mediaPanelOpen,
-    );
     applyPanelBackdropState();
   }
 
@@ -118,48 +101,7 @@ export function createUiStateController({
     );
   }
 
-  function setMediaPanelOpen(open, options = {}) {
-    if (open && state.mediaItems.length === 0) {
-      return;
-    }
-
-    state.mediaPanelOpen = open;
-    applyMediaPanelState();
-
-    if (open) {
-      renderMediaPanel();
-      elements.mediaCloseButton.focus();
-      return;
-    }
-
-    if (options.returnFocus) {
-      elements.toggleMediaButton.focus();
-    }
-  }
-
-  function openMediaPanelAt(index) {
-    if (state.mediaItems.length === 0) {
-      return;
-    }
-
-    state.activeMediaIndex = clampMediaIndex(index);
-    setMediaPanelOpen(true);
-    renderMediaPanel();
-  }
-
-  function stepMedia(delta) {
-    if (state.mediaItems.length < 2) {
-      return;
-    }
-
-    state.activeMediaIndex = clampMediaIndex(state.activeMediaIndex + delta);
-    renderMediaPanel();
-  }
-
   function closeOpenPanels(options = {}) {
-    if (state.mediaPanelOpen) {
-      setMediaPanelOpen(false, options);
-    }
     if (state.activeInspectorPanel && !isDesktopInspectorLayout()) {
       setInspectorPanel(undefined, options);
     }
@@ -180,35 +122,19 @@ export function createUiStateController({
 
   function applyPanelBackdropState() {
     const showBackdrop =
-      state.mediaPanelOpen ||
-      (!isDesktopInspectorLayout() &&
-        (state.filesPanelOpen || Boolean(state.activeInspectorPanel)));
+      !isDesktopInspectorLayout() &&
+      (state.filesPanelOpen || Boolean(state.activeInspectorPanel));
     elements.panelBackdrop.classList.toggle("hidden", !showBackdrop);
     elements.panelBackdrop.setAttribute("aria-hidden", String(!showBackdrop));
-  }
-
-  function clampMediaIndex(index) {
-    if (state.mediaItems.length === 0) {
-      return 0;
-    }
-
-    return (
-      ((index % state.mediaItems.length) + state.mediaItems.length) %
-      state.mediaItems.length
-    );
   }
 
   return {
     applyFilesPanelState,
     applyInspectorPanelState,
-    applyMediaPanelState,
     closeOpenPanels,
     handleViewportLayoutChange,
-    openMediaPanelAt,
     setFilesPanelOpen,
     setInspectorPanel,
-    setMediaPanelOpen,
-    stepMedia,
     toggleInspectorPanel,
   };
 }

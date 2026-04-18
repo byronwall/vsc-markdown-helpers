@@ -23,6 +23,18 @@
         </div>
 
         <div class="topbar-actions">
+          <div class="topbar-popover-wrap">
+            <button
+              id="toggleAppearanceButton"
+              class="ghost-button appearance-toggle-button icon-appearance"
+              type="button"
+              title="Change preview colors and text size"
+              aria-label="Change preview colors and text size"
+              aria-haspopup="dialog"
+            >
+              <span class="appearance-toggle-label">Style</span>
+            </button>
+          </div>
           <button
             id="toggleTocButton"
             class="ghost-button toolbar-button icon-outline"
@@ -49,10 +61,9 @@
             id="toggleMediaButton"
             class="ghost-button toolbar-button icon-media"
             type="button"
-            title="Open media view"
-            aria-label="Open media view"
-            aria-controls="mediaPanel"
-            aria-expanded="false"
+            title="Open image viewer"
+            aria-label="Open image viewer"
+            aria-haspopup="dialog"
           >
             <span class="toolbar-button-label sr-only">Media</span>
           </button>
@@ -168,63 +179,6 @@
         </section>
       </aside>
 
-      <section
-        id="mediaPanel"
-        class="panel utility-panel utility-panel-media is-collapsed"
-        aria-label="Media view"
-        aria-hidden="true"
-        tabindex="-1"
-      >
-        <div class="panel-header utility-panel-header compact media-panel-header">
-          <div>
-            <p class="eyebrow">Media View</p>
-            <h2>Image Carousel</h2>
-            <p id="mediaSubtitle" class="utility-panel-subtitle">
-              Browse every image rendered in this markdown file.
-            </p>
-          </div>
-          <button
-            id="mediaCloseButton"
-            class="ghost-button icon-button icon-close utility-panel-close"
-            type="button"
-            title="Close media view"
-            aria-label="Close media view"
-          ></button>
-        </div>
-
-        <div id="mediaEmptyState" class="empty-state">
-          This document does not render any images yet.
-        </div>
-
-        <div id="mediaStage" class="media-stage hidden">
-          <div class="media-stage-frame">
-            <button
-              id="mediaPrevButton"
-              class="ghost-button icon-button icon-chevron-left media-nav-button"
-              type="button"
-              title="Previous image"
-              aria-label="Previous image"
-            ></button>
-            <img id="mediaStageImage" class="media-stage-image" alt="" />
-            <button
-              id="mediaNextButton"
-              class="ghost-button icon-button icon-chevron-right media-nav-button"
-              type="button"
-              title="Next image"
-              aria-label="Next image"
-            ></button>
-          </div>
-          <div class="media-stage-meta">
-            <div>
-              <p id="mediaCounter" class="media-counter"></p>
-              <p id="mediaCaption" class="media-caption"></p>
-              <p id="mediaMeta" class="media-meta"></p>
-            </div>
-          </div>
-          <div id="mediaThumbs" class="media-thumbs" role="list"></div>
-        </div>
-      </section>
-
       <main class="panel panel-preview">
         <div id="errorBanner" class="error-banner hidden"></div>
         <article id="previewContent" class="preview-content empty-preview">
@@ -232,7 +186,7 @@
             <p class="eyebrow">Rendered HTML</p>
             <h3>Markdown preview lives here</h3>
             <p>
-              Pick a markdown file from the top bar to render it here with a bounded reading width, a responsive outline, a link inspector, and an image carousel.
+              Pick a markdown file from the top bar to render it here with a bounded reading width, a responsive outline, a link inspector, and a dedicated image viewer modal.
             </p>
           </div>
         </article>
