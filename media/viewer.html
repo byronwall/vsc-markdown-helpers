@@ -9,97 +9,234 @@
   </head>
   <body>
     <div class="app-shell">
-      <div class="workspace-picker">
-        <button
-          id="toggleFilesButton"
-          class="ghost-button icon-button icon-files workspace-picker-toggle"
-          type="button"
-          title="Choose markdown file"
-          aria-label="Choose markdown file"
-          aria-controls="filesPanel"
-          aria-expanded="false"
-          aria-haspopup="dialog"
-        ></button>
-
-        <aside
-          id="filesPanel"
-          class="panel panel-files is-collapsed"
-          aria-label="Markdown files"
-          aria-hidden="true"
-          tabindex="-1"
-        >
-          <div class="panel-header">
-            <div>
-              <p class="eyebrow">Workspace</p>
-              <h1>Markdown Files</h1>
+      <header id="topbar" class="panel topbar">
+        <div class="topbar-primary">
+          <div class="topbar-current">
+            <p class="eyebrow">Markdown Preview</p>
+            <div class="topbar-current-main">
+              <h1 id="previewTitle" class="topbar-title">Select a markdown file</h1>
+              <p id="previewPath" class="preview-path">
+                Rendered preview stays here.
+              </p>
             </div>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <button
+            id="toggleTocButton"
+            class="ghost-button toolbar-button icon-outline"
+            type="button"
+            title="Toggle table of contents"
+            aria-label="Toggle table of contents"
+            aria-controls="inspectorPanel"
+            aria-expanded="false"
+          >
+            <span class="toolbar-button-label sr-only">Outline</span>
+          </button>
+          <button
+            id="toggleLinksButton"
+            class="ghost-button toolbar-button icon-links"
+            type="button"
+            title="Show links and detected paths"
+            aria-label="Show links and detected paths"
+            aria-controls="inspectorPanel"
+            aria-expanded="false"
+          >
+            <span class="toolbar-button-label sr-only">Links</span>
+          </button>
+          <button
+            id="toggleMediaButton"
+            class="ghost-button toolbar-button icon-media"
+            type="button"
+            title="Open media view"
+            aria-label="Open media view"
+            aria-controls="mediaPanel"
+            aria-expanded="false"
+          >
+            <span class="toolbar-button-label sr-only">Media</span>
+          </button>
+          <button
+            id="openTextButton"
+            class="ghost-button toolbar-button icon-open-text"
+            type="button"
+            title="Open text file"
+            aria-label="Open text file"
+          >
+            <span class="toolbar-button-label sr-only">Source</span>
+          </button>
+          <button
+            id="refreshButton"
+            class="ghost-button toolbar-button icon-refresh"
+            type="button"
+            title="Refresh preview"
+            aria-label="Refresh preview"
+          >
+            <span class="toolbar-button-label sr-only">Refresh</span>
+          </button>
+          <button
+            id="toggleFilesButton"
+            class="ghost-button toolbar-button icon-files"
+            type="button"
+            title="Choose markdown file"
+            aria-label="Choose markdown file"
+            aria-controls="filesPanel"
+            aria-expanded="false"
+            aria-haspopup="dialog"
+          >
+            <span class="toolbar-button-label sr-only">Files</span>
+          </button>
+        </div>
+      </header>
+
+      <div
+        id="panelBackdrop"
+        class="panel-backdrop hidden"
+        aria-hidden="true"
+        data-close-panel="true"
+      ></div>
+
+      <aside
+        id="filesPanel"
+        class="panel utility-panel utility-panel-files is-collapsed"
+        aria-label="Markdown files"
+        aria-hidden="true"
+        tabindex="-1"
+      >
+        <div class="panel-header utility-panel-header">
+          <div>
+            <p class="eyebrow">Workspace</p>
+            <h2>Markdown Files</h2>
+            <p class="utility-panel-subtitle">
+              Jump between markdown notes without leaving the preview.
+            </p>
+          </div>
+        </div>
+        <div class="files-filter-wrap">
+          <label class="sr-only" for="filesFilterInput">
+            Filter markdown files by name or path
+          </label>
+          <input
+            id="filesFilterInput"
+            class="panel-filter-input"
+            type="search"
+            placeholder="Filter by name or path"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <div id="filesEmptyState" class="empty-state hidden">
+          No markdown files found.
+        </div>
+        <div id="filesList" class="files-list" role="list"></div>
+      </aside>
+
+      <aside
+        id="inspectorPanel"
+        class="panel utility-panel utility-panel-inspector is-collapsed"
+        aria-label="Preview inspector"
+        aria-hidden="true"
+        tabindex="-1"
+      >
+        <div class="panel-header utility-panel-header compact">
+          <div>
+            <p id="inspectorEyebrow" class="eyebrow">Outline</p>
+            <h2 id="inspectorTitle">Sections</h2>
+            <p id="inspectorSubtitle" class="utility-panel-subtitle">
+              Follow the structure of the current file.
+            </p>
+          </div>
+          <button
+            id="inspectorCloseButton"
+            class="ghost-button icon-button icon-close utility-panel-close"
+            type="button"
+            title="Close inspector"
+            aria-label="Close inspector"
+          ></button>
+        </div>
+
+        <section id="tocSection" class="inspector-section">
+          <div id="tocEmptyState" class="empty-state">No headings yet.</div>
+          <nav id="tocList" class="toc-list"></nav>
+        </section>
+
+        <section id="linksSection" class="inspector-section hidden">
+          <div id="linksEmptyState" class="empty-state">
+            No links or detected paths yet.
+          </div>
+          <div id="linksList" class="link-list" role="list"></div>
+        </section>
+      </aside>
+
+      <section
+        id="mediaPanel"
+        class="panel utility-panel utility-panel-media is-collapsed"
+        aria-label="Media view"
+        aria-hidden="true"
+        tabindex="-1"
+      >
+        <div class="panel-header utility-panel-header compact media-panel-header">
+          <div>
+            <p class="eyebrow">Media View</p>
+            <h2>Image Carousel</h2>
+            <p id="mediaSubtitle" class="utility-panel-subtitle">
+              Browse every image rendered in this markdown file.
+            </p>
+          </div>
+          <button
+            id="mediaCloseButton"
+            class="ghost-button icon-button icon-close utility-panel-close"
+            type="button"
+            title="Close media view"
+            aria-label="Close media view"
+          ></button>
+        </div>
+
+        <div id="mediaEmptyState" class="empty-state">
+          This document does not render any images yet.
+        </div>
+
+        <div id="mediaStage" class="media-stage hidden">
+          <div class="media-stage-frame">
             <button
-              id="refreshButton"
-              class="ghost-button icon-button icon-refresh"
+              id="mediaPrevButton"
+              class="ghost-button icon-button icon-chevron-left media-nav-button"
               type="button"
-              title="Refresh"
-              aria-label="Refresh"
+              title="Previous image"
+              aria-label="Previous image"
+            ></button>
+            <img id="mediaStageImage" class="media-stage-image" alt="" />
+            <button
+              id="mediaNextButton"
+              class="ghost-button icon-button icon-chevron-right media-nav-button"
+              type="button"
+              title="Next image"
+              aria-label="Next image"
             ></button>
           </div>
-          <div class="files-filter-wrap">
-            <label class="sr-only" for="filesFilterInput">
-              Filter markdown files by name or path
-            </label>
-            <input
-              id="filesFilterInput"
-              class="panel-filter-input"
-              type="search"
-              placeholder="Filter by name or path"
-              autocomplete="off"
-              spellcheck="false"
-            />
+          <div class="media-stage-meta">
+            <div>
+              <p id="mediaCounter" class="media-counter"></p>
+              <p id="mediaCaption" class="media-caption"></p>
+              <p id="mediaMeta" class="media-meta"></p>
+            </div>
           </div>
-          <div id="filesEmptyState" class="empty-state hidden">
-            No markdown files found.
-          </div>
-          <div id="filesList" class="files-list" role="list"></div>
-        </aside>
-      </div>
+          <div id="mediaThumbs" class="media-thumbs" role="list"></div>
+        </div>
+      </section>
 
       <main class="panel panel-preview">
-        <header class="preview-header">
-          <div>
-            <p class="eyebrow">Preview</p>
-            <h2 id="previewTitle">Select a markdown file</h2>
-            <p id="previewPath" class="preview-path">Rendered preview stays here.</p>
-          </div>
-          <div class="preview-actions">
-            <button
-              id="openTextButton"
-              class="ghost-button icon-button icon-open-text"
-              type="button"
-              title="Open text file"
-              aria-label="Open text file"
-            ></button>
-          </div>
-        </header>
         <div id="errorBanner" class="error-banner hidden"></div>
         <article id="previewContent" class="preview-content empty-preview">
           <div class="welcome-card">
             <p class="eyebrow">Rendered HTML</p>
             <h3>Markdown preview lives here</h3>
             <p>
-              Pick a markdown file from the top-left library button to render it here with a bounded reading width.
+              Pick a markdown file from the top bar to render it here with a bounded reading width, a responsive outline, a link inspector, and an image carousel.
             </p>
           </div>
         </article>
       </main>
-
-      <aside class="panel panel-outline">
-        <div class="panel-header compact">
-          <div>
-            <p class="eyebrow">Outline</p>
-            <h2>Sections</h2>
-          </div>
-        </div>
-        <div id="tocEmptyState" class="empty-state">No headings yet.</div>
-        <nav id="tocList" class="toc-list"></nav>
-      </aside>
 
       <div id="modalShell" class="modal-shell hidden" aria-hidden="true">
         <div class="modal-backdrop" data-close-modal="true"></div>

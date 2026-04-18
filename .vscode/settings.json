@@ -18,5 +18,6 @@
     "titleBar.inactiveBackground": "#21473999",
     "titleBar.inactiveForeground": "#e7e7e799"
   },
-  "peacock.color": "#214739"
+  "peacock.color": "#214739",
+  "markdownHelpers.recentFilesFilter": "all"
 }

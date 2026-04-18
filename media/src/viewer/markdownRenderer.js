@@ -844,6 +844,12 @@ function activateLocalLink(anchor, tools) {
     }
 
     event.preventDefault();
+    if (typeof tools.handleLocalLinkNavigation === "function") {
+      const handled = tools.handleLocalLinkNavigation(href, anchor);
+      if (handled) {
+        return;
+      }
+    }
     tools.vscode.postMessage({ type: "openLocalLink", href });
   });
 
