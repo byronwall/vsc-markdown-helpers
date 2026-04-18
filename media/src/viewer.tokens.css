@@ -15,6 +15,20 @@
   --accent-soft: rgba(30, 108, 83, 0.12);
   --accent-warm: #5f8474;
   --accent-warm-soft: rgba(95, 132, 116, 0.12);
+  --table-surface: color-mix(in srgb, var(--surface-strong) 90%, white);
+  --table-surface-alt: color-mix(in srgb, var(--surface) 78%, var(--code-bg));
+  --table-surface-hover: color-mix(
+    in srgb,
+    var(--accent-soft) 42%,
+    var(--table-surface)
+  );
+  --table-head-bg: color-mix(in srgb, var(--accent-soft) 42%, white);
+  --table-head-bg-strong: color-mix(in srgb, var(--accent-soft) 72%, white);
+  --table-head-bg-soft: color-mix(
+    in srgb,
+    rgba(255, 255, 255, 0.96) 80%,
+    var(--accent-soft)
+  );
   --error: #a53d2d;
   --shadow: 0 20px 44px rgba(27, 44, 36, 0.1);
   --shadow-soft: 0 10px 24px rgba(27, 44, 36, 0.07);
