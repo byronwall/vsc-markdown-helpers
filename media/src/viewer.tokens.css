@@ -1,42 +1,97 @@
 :root {
-  --bg: #eef3f0;
-  --bg-strong: #e3ebe7;
-  --surface: rgba(247, 251, 249, 0.76);
-  --surface-strong: rgba(254, 255, 254, 0.94);
-  --surface-elevated: rgba(251, 254, 252, 0.98);
-  --document-bg: #fbfdfc;
-  --document-bg-strong: #ffffff;
-  --ink: #183229;
-  --ink-muted: #53695f;
-  --ink-soft: #73877d;
-  --line: rgba(51, 78, 65, 0.12);
-  --line-strong: rgba(51, 78, 65, 0.22);
-  --accent: #1e6c53;
-  --accent-soft: rgba(30, 108, 83, 0.12);
-  --accent-warm: #5f8474;
-  --accent-warm-soft: rgba(95, 132, 116, 0.12);
-  --table-surface: color-mix(in srgb, var(--surface-strong) 90%, white);
-  --table-surface-alt: color-mix(in srgb, var(--surface) 78%, var(--code-bg));
+  /* Theme primitives: future palette switching should only need these values. */
+  --theme-canvas: #eef3f0;
+  --theme-surface: #fbfdfc;
+  --theme-ink: #183229;
+  --theme-accent: #1e6c53;
+  --theme-accent-warm: #5f8474;
+  --theme-accent-cool: #3e62a7;
+  --theme-danger: #a53d2d;
+
+  --bg: var(--theme-canvas);
+  --bg-strong: color-mix(
+    in srgb,
+    var(--theme-canvas) 76%,
+    var(--theme-surface)
+  );
+  --surface: color-mix(in srgb, var(--theme-surface) 76%, transparent);
+  --surface-strong: color-mix(
+    in srgb,
+    var(--theme-surface) 94%,
+    var(--theme-canvas)
+  );
+  --surface-elevated: color-mix(
+    in srgb,
+    var(--theme-surface) 98%,
+    var(--theme-canvas)
+  );
+  --document-bg: color-mix(in srgb, var(--theme-surface) 92%, var(--bg));
+  --document-bg-strong: var(--theme-surface);
+  --ink: var(--theme-ink);
+  --ink-muted: color-mix(in srgb, var(--theme-ink) 68%, var(--theme-surface));
+  --ink-soft: color-mix(in srgb, var(--theme-ink) 52%, var(--theme-surface));
+  --line: color-mix(in srgb, var(--theme-ink) 12%, transparent);
+  --line-strong: color-mix(in srgb, var(--theme-ink) 22%, transparent);
+  --accent: var(--theme-accent);
+  --accent-soft: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  --accent-warm: var(--theme-accent-warm);
+  --accent-warm-soft: color-mix(
+    in srgb,
+    var(--theme-accent-warm) 12%,
+    transparent
+  );
+  --accent-cool: var(--theme-accent-cool);
+  --accent-cool-soft: color-mix(
+    in srgb,
+    var(--theme-accent-cool) 12%,
+    transparent
+  );
+  --neutral-soft: color-mix(in srgb, var(--theme-ink) 8%, transparent);
+  --table-surface: color-mix(
+    in srgb,
+    var(--document-bg-strong) 90%,
+    var(--code-bg)
+  );
+  --table-surface-alt: color-mix(
+    in srgb,
+    var(--document-bg-strong) 78%,
+    var(--code-bg)
+  );
   --table-surface-hover: color-mix(
     in srgb,
     var(--accent-soft) 42%,
     var(--table-surface)
   );
-  --table-head-bg: color-mix(in srgb, var(--accent-soft) 42%, white);
-  --table-head-bg-strong: color-mix(in srgb, var(--accent-soft) 72%, white);
+  --table-head-bg: color-mix(
+    in srgb,
+    var(--document-bg-strong) 72%,
+    var(--accent)
+  );
+  --table-head-bg-strong: color-mix(
+    in srgb,
+    var(--document-bg-strong) 56%,
+    var(--accent)
+  );
   --table-head-bg-soft: color-mix(
     in srgb,
-    rgba(255, 255, 255, 0.96) 80%,
-    var(--accent-soft)
+    var(--document-bg-strong) 64%,
+    var(--accent)
   );
-  --error: #a53d2d;
-  --shadow: 0 20px 44px rgba(27, 44, 36, 0.1);
-  --shadow-soft: 0 10px 24px rgba(27, 44, 36, 0.07);
+  --table-head-line: color-mix(in srgb, var(--accent) 24%, var(--line-strong));
+  --error: var(--theme-danger);
+  --shadow: 0 20px 44px color-mix(in srgb, var(--theme-ink) 10%, transparent);
+  --shadow-soft: 0 10px 24px
+    color-mix(in srgb, var(--theme-ink) 7%, transparent);
   --document-shadow:
-    0 24px 60px rgba(31, 53, 42, 0.12), 0 2px 0 rgba(255, 255, 255, 0.92) inset;
-  --scrollbar-track: rgba(57, 77, 67, 0.08);
-  --scrollbar-thumb: rgba(55, 99, 80, 0.3);
-  --scrollbar-thumb-strong: rgba(36, 115, 86, 0.44);
+    0 24px 60px color-mix(in srgb, var(--theme-ink) 12%, transparent),
+    0 2px 0 color-mix(in srgb, var(--document-bg-strong) 92%, transparent) inset;
+  --scrollbar-track: color-mix(in srgb, var(--theme-ink) 8%, transparent);
+  --scrollbar-thumb: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  --scrollbar-thumb-strong: color-mix(
+    in srgb,
+    var(--theme-accent) 44%,
+    transparent
+  );
   --radius-lg: 28px;
   --radius-md: 18px;
   --radius-sm: 12px;
@@ -46,21 +101,100 @@
   --sidebar-width: 18rem;
   --outline-width: 16rem;
   --topbar-height: 5.5rem;
-  --inspector-width: clamp(20rem, 24vw, 25rem);
+  --inspector-width: clamp(23rem, 30vw, 31rem);
   --document-padding: clamp(1.4rem, 2.6vw, 2.8rem);
   --document-padding-block: clamp(1.6rem, 3vw, 3.1rem);
-  --panel-overlay: rgba(24, 38, 31, 0.2);
+  --panel-overlay: color-mix(in srgb, var(--theme-ink) 20%, transparent);
+  --page-glow-accent: color-mix(in srgb, var(--accent) 10%, transparent);
+  --page-glow-accent-alt: color-mix(
+    in srgb,
+    var(--accent-warm) 12%,
+    transparent
+  );
+  --topbar-surface-start: color-mix(
+    in srgb,
+    var(--document-bg-strong) 94%,
+    var(--bg)
+  );
+  --topbar-surface-end: color-mix(
+    in srgb,
+    var(--surface-strong) 92%,
+    var(--bg)
+  );
+  --preview-shell-start: color-mix(
+    in srgb,
+    var(--surface-elevated) 76%,
+    var(--accent-warm-soft)
+  );
+  --preview-shell-end: color-mix(
+    in srgb,
+    var(--surface-elevated) 72%,
+    var(--bg)
+  );
+  --header-sheen: color-mix(
+    in srgb,
+    var(--document-bg-strong) 34%,
+    transparent
+  );
+  --panel-backdrop-start: color-mix(in srgb, var(--theme-ink) 16%, transparent);
+  --panel-backdrop-end: color-mix(in srgb, var(--theme-ink) 30%, transparent);
+  --card-surface-start: color-mix(
+    in srgb,
+    var(--document-bg-strong) 98%,
+    var(--bg)
+  );
+  --card-surface-end: color-mix(in srgb, var(--surface-strong) 88%, var(--bg));
+  --card-shadow: 0 14px 28px
+    color-mix(in srgb, var(--theme-ink) 8%, transparent);
+  --media-stage-glow: color-mix(in srgb, var(--accent) 8%, transparent);
+  --media-stage-start: color-mix(
+    in srgb,
+    var(--document-bg-strong) 84%,
+    var(--accent-warm-soft)
+  );
+  --media-stage-end: color-mix(
+    in srgb,
+    var(--surface-strong) 76%,
+    var(--accent-warm-soft)
+  );
+  --media-control-surface: color-mix(
+    in srgb,
+    var(--document-bg-strong) 88%,
+    var(--accent-warm-soft)
+  );
+  --media-shadow: 0 20px 44px
+    color-mix(in srgb, var(--theme-ink) 14%, transparent);
+  --media-shadow-soft: 0 12px 24px
+    color-mix(in srgb, var(--theme-ink) 8%, transparent);
+  --media-shadow-strong: 0 20px 40px
+    color-mix(in srgb, var(--theme-ink) 16%, transparent);
   --code-line-height: 1.55rem;
-  --code-bg: #eef4f1;
-  --code-bg-strong: #e3ece8;
-  --code-line: rgba(55, 86, 72, 0.16);
-  --code-ink: #162820;
-  --code-muted: #63786f;
-  --code-accent: #0f6a56;
-  --code-keyword: #7a2f58;
-  --code-string: #9a5d19;
-  --code-number: #3e62a7;
-  --code-comment: #73827a;
+  --code-bg: color-mix(in srgb, var(--document-bg) 82%, var(--bg));
+  --code-bg-strong: color-mix(
+    in srgb,
+    var(--document-bg-strong) 78%,
+    var(--bg-strong)
+  );
+  --code-line: color-mix(in srgb, var(--theme-ink) 16%, transparent);
+  --code-ink: color-mix(in srgb, var(--theme-ink) 96%, var(--theme-accent));
+  --code-muted: color-mix(in srgb, var(--ink-muted) 88%, var(--document-bg));
+  --code-accent: color-mix(in srgb, var(--theme-accent) 92%, var(--theme-ink));
+  --code-keyword: color-mix(
+    in srgb,
+    var(--theme-danger) 58%,
+    var(--theme-accent-cool)
+  );
+  --code-string: color-mix(
+    in srgb,
+    var(--theme-accent-warm) 76%,
+    var(--theme-danger)
+  );
+  --code-number: var(--theme-accent-cool);
+  --code-comment: color-mix(
+    in srgb,
+    var(--theme-ink) 44%,
+    var(--theme-surface)
+  );
   --font-sans:
     "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
   --font-ui: "Avenir Next", "Segoe UI", sans-serif;

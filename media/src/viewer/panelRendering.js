@@ -127,16 +127,23 @@ export function createPanelRenderingController({
         badges.append(createLinkBadge(`${item.count} refs`, "kind-count"));
       }
 
-      const href = document.createElement("div");
-      href.className = "link-card-href";
-      href.textContent = item.href;
-
-      const context = document.createElement("div");
-      context.className = "link-card-context";
-      context.textContent = item.context;
+      const hrefText = getLinkHrefText(item);
+      const contextText = getLinkContextText(item, hrefText);
 
       header.append(title, badges);
-      button.append(header, href, context);
+      button.append(header);
+      if (hrefText) {
+        const href = document.createElement("div");
+        href.className = "link-card-href";
+        href.textContent = hrefText;
+        button.append(href);
+      }
+      if (contextText) {
+        const context = document.createElement("div");
+        context.className = "link-card-context";
+        context.textContent = contextText;
+        button.append(context);
+      }
       button.addEventListener("click", () => {
         openLinkItem(item);
         if (!isDesktopInspectorLayout() && item.kind !== "external") {
@@ -221,7 +228,7 @@ export function createPanelRenderingController({
       elements.inspectorEyebrow.textContent = "Links";
       elements.inspectorTitle.textContent = "Link Inventory";
       elements.inspectorSubtitle.textContent = state.selectedPath
-        ? `${state.links.length} unique references across authored links and detected path tokens.`
+        ? summarizeLinkInventory(state.links)
         : "Choose a markdown file to inspect every rendered link.";
       return;
     }
@@ -278,4 +285,62 @@ function createLinkBadge(label, className) {
   badge.className = `link-card-badge ${className}`;
   badge.textContent = label;
   return badge;
+}
+
+function getLinkHrefText(item) {
+  if (!item.href) {
+    return "";
+  }
+
+  return normalizeLinkText(item.label) === normalizeLinkText(item.href)
+    ? ""
+    : item.href;
+}
+
+function getLinkContextText(item, hrefText) {
+  const rawContext = item.context?.trim();
+  if (!rawContext || rawContext === "Referenced in the rendered preview.") {
+    return "";
+  }
+
+  const replacementLabel =
+    item.kind === "external" ? "this URL" : "this target";
+  const sanitizedContext = rawContext
+    .split(item.href)
+    .join(replacementLabel)
+    .trim();
+  const normalizedContext = normalizeLinkText(sanitizedContext);
+  if (!normalizedContext) {
+    return "";
+  }
+
+  if (
+    normalizedContext === normalizeLinkText(item.label) ||
+    normalizedContext === normalizeLinkText(item.href) ||
+    (hrefText && normalizedContext === normalizeLinkText(hrefText))
+  ) {
+    return "";
+  }
+
+  return sanitizedContext;
+}
+
+function normalizeLinkText(value) {
+  return (value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/["'`]+/g, "")
+    .trim();
+}
+
+function summarizeLinkInventory(links) {
+  const total = links.length;
+  const detectedCount = links.filter(
+    (item) => item.source === "detected",
+  ).length;
+  if (detectedCount > 0) {
+    return `${total} unique references, ${detectedCount} detected`;
+  }
+
+  return `${total} unique references`;
 }

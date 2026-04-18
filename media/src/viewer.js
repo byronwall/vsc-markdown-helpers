@@ -97,7 +97,9 @@ function initialize() {
     elements,
     hasTextSelectionWithin,
     openMediaPanelAt: (index) => uiState.openMediaPanelAt(index),
+    renderMediaPanel: () => panelRendering.renderMediaPanel(),
     renderToc: () => panelRendering.renderToc(),
+    showModal: (options) => modalController.showModal(options),
     state,
     vscode,
   });
@@ -375,8 +377,10 @@ function renderPreview(path, html) {
   });
 
   previewNavigation.bindInternalAnchorLinks();
+  previewNavigation.collectPreviewArtifacts();
   panelRendering.renderToc();
   panelRendering.renderFiles();
+  panelRendering.renderMediaPanel();
 
   void enhancePreview(elements.previewContent, {
     vscode,

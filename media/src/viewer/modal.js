@@ -3,6 +3,8 @@ export function createModalController({
   state,
   getCurrentScrollTop,
 }) {
+  let lockedPageStyles;
+
   function showModal(options) {
     const {
       content,
@@ -36,10 +38,7 @@ export function createModalController({
     elements.modalShell.setAttribute("aria-hidden", "false");
     elements.modalShell.classList.toggle("is-wide", Boolean(wide));
     elements.modalShell.classList.toggle("is-immersive", state.modalImmersive);
-    document.documentElement.classList.add("has-modal");
-    document.body.classList.add("has-modal");
-    document.body.style.top = `-${state.modalScrollTop}px`;
-    document.body.style.width = "100%";
+    lockPageScroll(state.modalScrollTop);
     window.requestAnimationFrame(() => {
       elements.modalCloseButton.focus();
     });
@@ -80,11 +79,8 @@ export function createModalController({
     elements.modalSubtitle.classList.add("hidden");
     elements.modalHeaderExtras.replaceChildren();
     elements.modalHeaderExtras.classList.add("hidden");
-    document.documentElement.classList.remove("has-modal");
-    document.body.classList.remove("has-modal");
-    document.body.style.top = "";
-    document.body.style.width = "";
-    window.scrollTo({ top: state.modalScrollTop, behavior: "instant" });
+    unlockPageScroll();
+    window.scrollTo({ top: state.modalScrollTop, behavior: "auto" });
     state.modalImmersive = false;
     state.modalScrollTop = 0;
 
@@ -105,6 +101,67 @@ export function createModalController({
       state.modalCleanup();
     }
     state.modalCleanup = undefined;
+  }
+
+  function lockPageScroll(scrollTop) {
+    const root = document.documentElement;
+    const body = document.body;
+
+    lockedPageStyles = {
+      htmlOverflow: root.style.overflow,
+      htmlOverscrollBehavior: root.style.overscrollBehavior,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyLeft: body.style.left,
+      bodyRight: body.style.right,
+      bodyWidth: body.style.width,
+      bodyOverscrollBehavior: body.style.overscrollBehavior,
+    };
+
+    root.classList.add("has-modal");
+    body.classList.add("has-modal");
+    root.style.overflow = "hidden";
+    root.style.overscrollBehavior = "none";
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollTop}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.overscrollBehavior = "none";
+  }
+
+  function unlockPageScroll() {
+    const root = document.documentElement;
+    const body = document.body;
+
+    root.classList.remove("has-modal");
+    body.classList.remove("has-modal");
+
+    if (!lockedPageStyles) {
+      root.style.overflow = "";
+      root.style.overscrollBehavior = "";
+      body.style.overflow = "";
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      body.style.overscrollBehavior = "";
+      return;
+    }
+
+    root.style.overflow = lockedPageStyles.htmlOverflow;
+    root.style.overscrollBehavior = lockedPageStyles.htmlOverscrollBehavior;
+    body.style.overflow = lockedPageStyles.bodyOverflow;
+    body.style.position = lockedPageStyles.bodyPosition;
+    body.style.top = lockedPageStyles.bodyTop;
+    body.style.left = lockedPageStyles.bodyLeft;
+    body.style.right = lockedPageStyles.bodyRight;
+    body.style.width = lockedPageStyles.bodyWidth;
+    body.style.overscrollBehavior = lockedPageStyles.bodyOverscrollBehavior;
+    lockedPageStyles = undefined;
   }
 
   return {

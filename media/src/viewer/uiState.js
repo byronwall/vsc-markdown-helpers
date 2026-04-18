@@ -27,6 +27,7 @@ export function createUiStateController({
     const activePanel = state.activeInspectorPanel;
     const isOpen = Boolean(activePanel);
     const desktop = isDesktopInspectorLayout();
+    const activeInspectorWidth = desktop && isOpen ? "var(--inspector-width)" : "0px";
     elements.inspectorPanel.classList.toggle("is-collapsed", !isOpen);
     elements.inspectorPanel.classList.toggle(
       "is-desktop-docked",
@@ -54,6 +55,10 @@ export function createUiStateController({
     document.documentElement.classList.toggle(
       "has-desktop-inspector",
       desktop && isOpen,
+    );
+    document.documentElement.style.setProperty(
+      "--active-inspector-width",
+      activeInspectorWidth,
     );
     updateInspectorCopy();
     applyPanelBackdropState();
