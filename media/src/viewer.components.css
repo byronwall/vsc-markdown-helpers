@@ -720,6 +720,8 @@ samp {
   text-decoration: none;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+  user-select: text;
+  -webkit-user-select: text;
   transition:
     color 120ms ease,
     background-color 120ms ease,

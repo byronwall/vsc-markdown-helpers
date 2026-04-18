@@ -1,6 +1,7 @@
 import hljs from "highlight.js/lib/common";
 import mermaid from "mermaid";
 import svgPanZoom from "svg-pan-zoom";
+import { hasTextSelectionWithin } from "./shared.js";
 
 const COLLAPSED_CODE_LINES = 15;
 const TABLE_COLUMN_MAX_WIDTH = 360;
@@ -838,6 +839,10 @@ function activateLocalLink(anchor, tools) {
 
   anchor.dataset.linkEnhanced = "true";
   anchor.addEventListener("click", (event) => {
+    if (hasTextSelectionWithin(anchor)) {
+      return;
+    }
+
     event.preventDefault();
     tools.vscode.postMessage({ type: "openLocalLink", href });
   });

@@ -78,6 +78,12 @@ body.has-modal {
   top: 1.25rem;
   left: 1.25rem;
   z-index: 20;
+  pointer-events: none;
+}
+
+.workspace-picker-toggle,
+.panel-files {
+  pointer-events: auto;
 }
 
 .panel {

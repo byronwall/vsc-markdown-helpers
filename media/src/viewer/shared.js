@@ -38,3 +38,33 @@ export function dirname(value) {
   }
   return parts.slice(0, -1).join("/");
 }
+
+export function hasTextSelectionWithin(node) {
+  if (!(node instanceof Node)) {
+    return false;
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    return false;
+  }
+
+  for (let index = 0; index < selection.rangeCount; index += 1) {
+    const range = selection.getRangeAt(index);
+    if (range.collapsed) {
+      continue;
+    }
+
+    try {
+      if (range.intersectsNode(node)) {
+        return true;
+      }
+    } catch {
+      if (node.contains(range.commonAncestorContainer)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}

@@ -4,6 +4,7 @@ import {
   dirname,
   formatAge,
   formatWordCount,
+  hasTextSelectionWithin,
 } from "./viewer/shared.js";
 
 const vscode = acquireVsCodeApi();
@@ -97,6 +98,10 @@ function initialize() {
 
   document.addEventListener("click", (event) => {
     if (!(event.target instanceof Node)) {
+      return;
+    }
+
+    if (hasTextSelectionWithin(event.target)) {
       return;
     }
 
