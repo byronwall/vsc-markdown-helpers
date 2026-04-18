@@ -10,14 +10,6 @@
 
 ## Improve markdown preview
 
-- [x] Add a fixed top navbar that includes a couple of triggers for useful stuff
-  - [x] One of those should open the TOC as a popover on small screens, and as a sidebar on larger screens
-  - [x] Another should open a pane that lists all links in teh file - this should include "real" links and any code tick or other things that are being parsed as link
-  - [x] Include a popover trigger that opens a "media" view which gives all images as a carousel
-  - [x] Move the file picker into that same top nav as a far left option
-- [x] Links to internal headings should be clickable in the preview and should scroll to the correct location in the preview
-
-- Need to do some structural refactors to reduce the code size in large JS files.
 - Convert over to a proper component system - SolidJS
 - Rendered tables need to more aggressively shrink columns to try and fit all content on screen. I see examples where a column has whitespace and requires horizontal scrolling to see neighbors.
 
@@ -34,3 +26,5 @@
 
 - implement a color picker menu in the top nav bar -- have it open a popover that shows a lsit of theme colors - clicking should change hte theme - persist this somewhere (like user settings) so it is stable -- give around 16 themes with a decent split between dark and light colors.
 - implement some basic font controls to make text relatively large or smaller - persist in user settings or somethign when changed -- show this in teh same menu as the color themes.
+
+- Revise logic around table bleed - ensure we bleed tables out if there is no section TOC visible (user can hide the TOC, tables should expand out if so)

@@ -68,3 +68,9 @@ export function hasTextSelectionWithin(node) {
 
   return false;
 }
+
+export function cleanText(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
