@@ -558,7 +558,14 @@ function clampPreviewFontScale(value: number): number {
     return DEFAULT_PREVIEW_FONT_SCALE;
   }
 
-  return Math.round(Math.min(MAX_PREVIEW_FONT_SCALE, Math.max(MIN_PREVIEW_FONT_SCALE, value)) * 100) / 100;
+  return (
+    Math.round(
+      Math.min(
+        MAX_PREVIEW_FONT_SCALE,
+        Math.max(MIN_PREVIEW_FONT_SCALE, value),
+      ) * 100,
+    ) / 100
+  );
 }
 
 function isWebSafeImageSource(src: string): boolean {
